@@ -9,14 +9,13 @@ import JsonViewer from "@/components/JsonViewer";
 import { useExplorer } from "@/contexts/ExplorerContext";
 import { useRequest } from "@/contexts/RequestContext";
 import { isMediaRoute } from "@/lib/explorer-client";
+import { SmartPagination } from "@/components/SmartPagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Code as CodeIcon,
   Database,
   Loader2,
@@ -39,6 +38,13 @@ function ContentExplorerComponent() {
   if (!connection) {
     return null;
   }
+
+  const handlePageChange = (page: number) => {
+    const nextParams = { ...queryParams, page: String(page) };
+    setQueryParams(nextParams);
+    syncCurrentBookmark(String(page), "push");
+    void executeCurrentRequest(nextParams);
+  };
 
   const isSelectedMediaRoute = selectedRoute ? isMediaRoute(selectedRoute.path) : false;
 
@@ -82,47 +88,13 @@ function ContentExplorerComponent() {
                     </Select>
                   </div>
 
-                  <div className="flex items-center gap-2 border-l border-border/30 pl-3">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      disabled={isLoading || Number.parseInt(queryParams.page || "1", 10) <= 1}
-                      onClick={() => {
-                        const previousPage = Math.max(1, Number.parseInt(queryParams.page || "1", 10) - 1);
-                        const nextParams = { ...queryParams, page: String(previousPage) };
-                        setQueryParams(nextParams);
-                        syncCurrentBookmark(String(previousPage), "push");
-                        void executeCurrentRequest(nextParams);
-                      }}
-                      className="h-10 w-10"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-
-                    <span className="min-w-[92px] text-center text-sm font-semibold text-foreground/80">
-                      Page {queryParams.page || "1"}
-                      {metrics?.totalPages ? ` / ${metrics.totalPages}` : ""}
-                    </span>
-
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      disabled={
-                        isLoading ||
-                        (metrics?.totalPages !== null &&
-                          Number.parseInt(queryParams.page || "1", 10) >= (metrics?.totalPages || 1))
-                      }
-                      onClick={() => {
-                        const nextPage = Number.parseInt(queryParams.page || "1", 10) + 1;
-                        const nextParams = { ...queryParams, page: String(nextPage) };
-                        setQueryParams(nextParams);
-                        syncCurrentBookmark(String(nextPage), "push");
-                        void executeCurrentRequest(nextParams);
-                      }}
-                      className="h-10 w-10"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
+                  <div className="flex items-center border-l border-border/30 pl-3">
+                    <SmartPagination
+                      currentPage={Number.parseInt(queryParams.page || "1", 10)}
+                      totalPages={metrics?.totalPages ?? null}
+                      isLoading={isLoading}
+                      onPageChange={handlePageChange}
+                    />
                   </div>
                 </div>
               </div>
@@ -297,6 +269,15 @@ function ContentExplorerComponent() {
               <JsonViewer data={responseData} />
             </TabsContent>
           </Tabs>
+
+          <div className="mt-6 flex justify-center pb-8 border-t border-border/20 pt-6">
+            <SmartPagination
+              currentPage={Number.parseInt(queryParams.page || "1", 10)}
+              totalPages={metrics?.totalPages ?? null}
+              isLoading={isLoading}
+              onPageChange={handlePageChange}
+            />
+          </div>
         </div>
       ) : null}
     </div>
