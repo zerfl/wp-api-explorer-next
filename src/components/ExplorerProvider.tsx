@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ExplorerContext, ExplorerContextValue } from "@/contexts/ExplorerContext";
 import { RequestContext, RequestContextValue } from "@/contexts/RequestContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import {
   buildExplorerPath,
   ContentCollection,
@@ -684,8 +685,10 @@ export default function ExplorerProvider({
   );
 
   return (
-    <ExplorerContext.Provider value={explorerContextValue}>
-      <RequestContext.Provider value={requestContextValue}>{children}</RequestContext.Provider>
-    </ExplorerContext.Provider>
+    <ThemeProvider>
+      <ExplorerContext.Provider value={explorerContextValue}>
+        <RequestContext.Provider value={requestContextValue}>{children}</RequestContext.Provider>
+      </ExplorerContext.Provider>
+    </ThemeProvider>
   );
 }

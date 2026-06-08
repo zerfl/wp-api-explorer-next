@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { useExplorer } from "@/contexts/ExplorerContext";
-import { ExplorerTheme } from "@/lib/explorer-client";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   ChevronDown,
   ExternalLink,
@@ -22,17 +22,16 @@ import {
   Unlink,
 } from "lucide-react";
 
-interface ExplorerHeaderProps {
-  theme: ExplorerTheme;
-  onThemeChange: (theme: ExplorerTheme) => void;
-}
-
-function ExplorerHeaderComponent({ theme, onThemeChange }: ExplorerHeaderProps) {
+function ExplorerHeaderComponent() {
   const {
     state: { connection, selectedRoute, isAdvancedMode, isConnecting, connectionError },
     actions: { connectToSite, disconnect, setAdvancedMode },
     meta: { selectedCollection, suggestedSiteUrl, bookmarkContentType },
   } = useExplorer();
+  const {
+    state: { theme },
+    actions: { setTheme },
+  } = useTheme();
 
   const headerStateKey = [
     suggestedSiteUrl || "https://techcrunch.com",
@@ -75,7 +74,7 @@ function ExplorerHeaderComponent({ theme, onThemeChange }: ExplorerHeaderProps) 
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => onThemeChange("light")}
+            onClick={() => setTheme("light")}
             className={`h-7 w-7 ${theme === "light" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
             title="Light mode"
           >
@@ -85,7 +84,7 @@ function ExplorerHeaderComponent({ theme, onThemeChange }: ExplorerHeaderProps) 
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => onThemeChange("system")}
+            onClick={() => setTheme("system")}
             className={`h-7 w-7 ${theme === "system" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
             title="System theme"
           >
@@ -95,7 +94,7 @@ function ExplorerHeaderComponent({ theme, onThemeChange }: ExplorerHeaderProps) 
             type="button"
             variant="ghost"
             size="icon"
-            onClick={() => onThemeChange("dark")}
+            onClick={() => setTheme("dark")}
             className={`h-7 w-7 ${theme === "dark" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
             title="Dark mode"
           >
