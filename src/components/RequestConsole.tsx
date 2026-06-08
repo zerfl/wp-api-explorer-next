@@ -1,36 +1,26 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useExplorer } from "@/contexts/ExplorerContext";
+import { useRequest } from "@/contexts/RequestContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Play, Copy, Check, Terminal, Code2, Info, Timer, Files, Layers } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-interface RequestConsoleProps {
-  method: string;
-  targetUrl: string;
-  useProxy: boolean;
-  auth: { username: string; appPassword: string } | null;
-  isLoading: boolean;
-  onTriggerRequest: () => void;
-  metrics: {
-    status: number | null;
-    statusText: string;
-    timeMs: number | null;
-    totalRecords: number | null;
-    totalPages: number | null;
-  } | null;
-}
+export default function RequestConsole() {
+  const {
+    state: { connection },
+  } = useExplorer();
+  const {
+    state: { isLoading, metrics },
+    actions: { executeCurrentRequest },
+    meta: { constructedUrl: targetUrl },
+  } = useRequest();
 
-export default function RequestConsole({
-  method,
-  targetUrl,
-  useProxy,
-  auth,
-  isLoading,
-  onTriggerRequest,
-  metrics,
-}: RequestConsoleProps) {
+  const method = "GET";
+  const useProxy = connection?.useProxy || false;
+  const auth = connection?.auth || null;
   const [copied, setCopied] = useState(false);
 
   // Generate curl snippet
@@ -86,7 +76,9 @@ export default function RequestConsole({
           )}
         </div>
         <Button
-          onClick={onTriggerRequest}
+          onClick={() => {
+            void executeCurrentRequest();
+          }}
           disabled={isLoading || !targetUrl}
           className="w-full md:w-auto shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-5 h-10 shadow-md transition-all active:scale-95 text-sm"
         >

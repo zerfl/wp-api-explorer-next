@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useRequest } from "@/contexts/RequestContext";
 import { WpRouteInfo, WpArg } from "@/lib/wp-schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,8 +13,6 @@ import { Button } from "./ui/button";
 
 interface QueryBuilderProps {
   route: WpRouteInfo;
-  queryParams: Record<string, string>;
-  onParamsChange: (params: Record<string, string>) => void;
 }
 
 interface CustomParam {
@@ -21,32 +20,53 @@ interface CustomParam {
   value: string;
 }
 
-export default function QueryBuilder({
-  route,
-  queryParams,
-  onParamsChange,
-}: QueryBuilderProps) {
-  // Read endpoint args from schema
-  const endpoint = route.endpoints?.[0];
-  const args = endpoint?.args || {};
+export default function QueryBuilder({ route }: QueryBuilderProps) {
+  const {
+    state: { queryParams },
+    actions: { setQueryParams },
+  } = useRequest();
 
-  const [customParams, setCustomParams] = useState<CustomParam[]>([]);
-  const [prevRoute, setPrevRoute] = useState<WpRouteInfo | null>(null);
-
-  // Reset custom params and local fields on route change
-  if (route !== prevRoute) {
-    setPrevRoute(route);
-    const schemaKeys = Object.keys(args);
+  const initialCustomParams = useMemo(() => {
+    const endpointArgs = route.endpoints?.[0]?.args || {};
+    const schemaKeys = Object.keys(endpointArgs);
     const customs: CustomParam[] = [];
-    
+
     Object.entries(queryParams).forEach(([key, val]) => {
       if (!schemaKeys.includes(key) && key !== "page" && key !== "per_page" && key !== "_embed" && key !== "search") {
         customs.push({ key, value: val });
       }
     });
 
-    setCustomParams(customs);
-  }
+    return customs;
+  }, [queryParams, route]);
+
+  return (
+    <QueryBuilderForm
+      key={route.path}
+      route={route}
+      queryParams={queryParams}
+      setQueryParams={setQueryParams}
+      initialCustomParams={initialCustomParams}
+    />
+  );
+}
+
+interface QueryBuilderFormProps {
+  route: WpRouteInfo;
+  queryParams: Record<string, string>;
+  setQueryParams: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  initialCustomParams: CustomParam[];
+}
+
+function QueryBuilderForm({
+  route,
+  queryParams,
+  setQueryParams,
+  initialCustomParams,
+}: QueryBuilderFormProps) {
+  const endpoint = route.endpoints?.[0];
+  const args = endpoint?.args || {};
+  const [customParams, setCustomParams] = useState<CustomParam[]>(initialCustomParams);
 
   const handleArgChange = (key: string, value: string | null | undefined) => {
     const newParams = { ...queryParams };
@@ -55,7 +75,7 @@ export default function QueryBuilder({
     } else {
       newParams[key] = value;
     }
-    onParamsChange(newParams);
+    setQueryParams(newParams);
   };
 
   const addCustomParam = () => {
@@ -82,7 +102,7 @@ export default function QueryBuilder({
       }
     });
     
-    onParamsChange(newParams);
+    setQueryParams(newParams);
   };
 
   const removeCustomParam = (index: number) => {
@@ -94,7 +114,7 @@ export default function QueryBuilder({
     if (removedKey) {
       delete newParams[removedKey];
     }
-    onParamsChange(newParams);
+    setQueryParams(newParams);
   };
 
   // Group schema keys into categories
