@@ -22,12 +22,12 @@ export const QUICK_CONNECT_SITES: QuickConnectSite[] = [
     name: "WP Tavern",
     url: "https://wptavern.com",
     description: "WordPress community news site (great for testing proxy mode).",
-    defaultProxy: true
+    defaultProxy: false
   },
   {
     name: "CSS-Tricks",
     url: "https://css-tricks.com",
     description: "Popular web design and development publication.",
-    defaultProxy: true
+    defaultProxy: false
   }
 ];

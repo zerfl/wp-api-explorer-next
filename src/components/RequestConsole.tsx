@@ -107,7 +107,7 @@ export default function RequestConsole({
               <Info className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-bold">Status</span>
+              <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</span>
               <span className="text-sm font-bold truncate block">
                 {metrics.status} {metrics.statusText}
               </span>
@@ -120,7 +120,7 @@ export default function RequestConsole({
               <Timer className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-bold">Latency</span>
+              <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Latency</span>
               <span className="text-sm font-bold truncate block">
                 {metrics.timeMs !== null ? `${metrics.timeMs}ms` : "--"}
               </span>
@@ -133,7 +133,7 @@ export default function RequestConsole({
               <Files className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-bold">Total Items</span>
+              <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Items</span>
               <span className="text-sm font-bold truncate block">
                 {metrics.totalRecords !== null ? metrics.totalRecords.toLocaleString() : "N/A"}
               </span>
@@ -146,7 +146,7 @@ export default function RequestConsole({
               <Layers className="h-4.5 w-4.5" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground block font-bold">Total Pages</span>
+              <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Pages</span>
               <span className="text-sm font-bold truncate block">
                 {metrics.totalPages !== null ? metrics.totalPages.toLocaleString() : "N/A"}
               </span>

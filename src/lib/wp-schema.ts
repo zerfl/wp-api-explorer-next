@@ -26,6 +26,8 @@ export interface WpSchema {
   routes: Record<string, { endpoints: WpEndpoint[] }>;
 }
 
+const DEFAULT_PER_PAGE = 100;
+
 // Default fallback endpoints if a site has disabled the schema index
 export const CORE_FALLBACK_ROUTES: Record<string, WpRouteInfo> = {
   "/wp/v2/posts": {
@@ -36,7 +38,7 @@ export const CORE_FALLBACK_ROUTES: Record<string, WpRouteInfo> = {
         methods: ["GET"],
         args: {
           page: { type: "integer", default: 1, description: "Current page of the collection." },
-          per_page: { type: "integer", default: 10, description: "Maximum number of items to be returned in result set." },
+          per_page: { type: "integer", default: DEFAULT_PER_PAGE, description: "Maximum number of items to be returned in result set." },
           search: { type: "string", description: "Limit results to those matching a string." },
           after: { type: "string", description: "Limit response to posts published after a given ISO8601 compliant date." },
           author: { type: "array", items: { type: "integer" }, description: "Limit result set to posts assigned to specific authors." },
@@ -59,7 +61,7 @@ export const CORE_FALLBACK_ROUTES: Record<string, WpRouteInfo> = {
         methods: ["GET"],
         args: {
           page: { type: "integer", default: 1, description: "Current page of the collection." },
-          per_page: { type: "integer", default: 10, description: "Maximum number of items..." },
+          per_page: { type: "integer", default: DEFAULT_PER_PAGE, description: "Maximum number of items..." },
           search: { type: "string", description: "Limit results to those matching a string." },
           parent: { type: "integer", description: "Limit result set to pages of this parent ID." },
           orderby: { type: "string", enum: ["author", "date", "id", "include", "modified", "parent", "relevance", "slug", "title", "menu_order"], default: "date", description: "Sort collection by object attribute." },
@@ -78,10 +80,10 @@ export const CORE_FALLBACK_ROUTES: Record<string, WpRouteInfo> = {
         methods: ["GET"],
         args: {
           page: { type: "integer", default: 1 },
-          per_page: { type: "integer", default: 10 },
+          per_page: { type: "integer", default: DEFAULT_PER_PAGE },
           search: { type: "string" },
           parent: { type: "integer", description: "Limit result set to items attached to this post ID." },
-          media_type: { type: "string", enum: ["image", "file"], description: "Limit results to specific media types." },
+          media_type: { type: "string", enum: ["image", "video", "audio", "application", "text"], description: "Limit results to specific media types." },
           mime_type: { type: "string", description: "Limit results to specific MIME types." },
           _embed: { type: "boolean", description: "Embed associated objects" }
         }
@@ -96,7 +98,7 @@ export const CORE_FALLBACK_ROUTES: Record<string, WpRouteInfo> = {
         methods: ["GET"],
         args: {
           page: { type: "integer", default: 1 },
-          per_page: { type: "integer", default: 10 },
+          per_page: { type: "integer", default: DEFAULT_PER_PAGE },
           search: { type: "string" },
           post: { type: "integer", description: "Limit results to those affiliated with this post ID." },
           author_email: { type: "string", description: "Limit results to those from specific author email." },
@@ -113,7 +115,7 @@ export const CORE_FALLBACK_ROUTES: Record<string, WpRouteInfo> = {
         methods: ["GET"],
         args: {
           page: { type: "integer", default: 1 },
-          per_page: { type: "integer", default: 10 },
+          per_page: { type: "integer", default: DEFAULT_PER_PAGE },
           search: { type: "string" },
           roles: { type: "array", items: { type: "string" }, description: "Limit results to users matching specific roles." }
         }
@@ -128,7 +130,7 @@ export const CORE_FALLBACK_ROUTES: Record<string, WpRouteInfo> = {
         methods: ["GET"],
         args: {
           page: { type: "integer", default: 1 },
-          per_page: { type: "integer", default: 10 },
+          per_page: { type: "integer", default: DEFAULT_PER_PAGE },
           search: { type: "string" },
           parent: { type: "integer" }
         }
@@ -143,7 +145,7 @@ export const CORE_FALLBACK_ROUTES: Record<string, WpRouteInfo> = {
         methods: ["GET"],
         args: {
           page: { type: "integer", default: 1 },
-          per_page: { type: "integer", default: 10 },
+          per_page: { type: "integer", default: DEFAULT_PER_PAGE },
           search: { type: "string" }
         }
       }

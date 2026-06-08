@@ -167,7 +167,7 @@ export default function QueryBuilder({
             </SelectContent>
           </Select>
           {arg.description && (
-            <p className="text-[10px] text-muted-foreground">{arg.description}</p>
+            <p className="text-xs text-muted-foreground">{arg.description}</p>
           )}
         </div>
       );
@@ -178,7 +178,7 @@ export default function QueryBuilder({
       return (
         <div key={key} className="space-y-1">
           <Label htmlFor={`arg-${key}`} className="text-xs font-semibold">
-            {key} <span className="text-[10px] text-muted-foreground">(Array enum)</span>
+            {key} <span className="text-xs text-muted-foreground">(Array enum)</span>
           </Label>
           <Select
             value={currentValue}
@@ -197,7 +197,7 @@ export default function QueryBuilder({
             </SelectContent>
           </Select>
           {arg.description && (
-            <p className="text-[10px] text-muted-foreground">{arg.description}</p>
+            <p className="text-xs text-muted-foreground">{arg.description}</p>
           )}
         </div>
       );
@@ -209,7 +209,7 @@ export default function QueryBuilder({
       <div key={key} className="space-y-1">
         <Label htmlFor={`arg-${key}`} className="text-xs font-semibold flex items-center justify-between">
           <span>{key}</span>
-          <span className="text-[10px] font-normal text-muted-foreground uppercase">{arg.type}</span>
+          <span className="text-xs font-normal uppercase text-muted-foreground">{arg.type}</span>
         </Label>
         <Input
           id={`arg-${key}`}
@@ -220,7 +220,7 @@ export default function QueryBuilder({
           className="h-9.5 text-xs bg-background/50"
         />
         {arg.description && (
-          <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
+          <p className="text-xs leading-relaxed text-muted-foreground line-clamp-2">
             {arg.description}
           </p>
         )}
