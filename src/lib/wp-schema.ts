@@ -1,3 +1,5 @@
+import { httpRequest } from "@/lib/http";
+
 export interface WpArg {
   type: string;
   description?: string;
@@ -224,38 +226,49 @@ export async function discoverWpApiRoot(siteUrl: string, useProxy: boolean = fal
     `${cleanedUrl}/index.php?rest_route=/`
   ];
 
-  let lastError: unknown = null;
+  let lastErrorMessage: string | null = null;
 
   for (const root of tryApiRoots) {
-    try {
-      const fetchUrl = useProxy 
-        ? `/api/proxy?url=${encodeURIComponent(root)}` 
-        : root;
+    const fetchUrl = useProxy
+      ? `/api/proxy?url=${encodeURIComponent(root)}`
+      : root;
 
-      const res = await fetch(fetchUrl);
-      if (!res.ok) {
-        throw new Error(`HTTP error ${res.status}`);
-      }
-      
-      const json = await res.json();
-      
-      // Basic check to see if this is a WordPress schema response
-      if (json && typeof json === "object" && "routes" in json) {
-        return {
-          apiRoot: root,
-          schema: {
-            name: json.name || "WordPress Site",
-            description: json.description || "",
-            url: json.url || cleanedUrl,
-            namespaces: json.namespaces || [],
-            routes: json.routes
-          }
-        };
-      }
-    } catch (err) {
-      lastError = err;
+    // Connecting is the critical step, so allow a longer timeout and one retry
+    // for transient failures. httpRequest never throws — it returns a result.
+    const result = await httpRequest(fetchUrl, { timeoutMs: 20000, retries: 1 });
+    if (!result.ok) {
+      lastErrorMessage = result.message;
+      continue;
     }
+
+    let json: unknown = null;
+    try {
+      json = JSON.parse(result.text);
+    } catch {
+      lastErrorMessage = "The site responded but did not return valid JSON.";
+      continue;
+    }
+
+    // Basic check to see if this is a WordPress schema response
+    if (json && typeof json === "object" && "routes" in json) {
+      const schema = json as Record<string, unknown>;
+      return {
+        apiRoot: root,
+        schema: {
+          name: (schema.name as string) || "WordPress Site",
+          description: (schema.description as string) || "",
+          url: (schema.url as string) || cleanedUrl,
+          namespaces: (schema.namespaces as string[]) || [],
+          routes: schema.routes as WpSchema["routes"],
+        },
+      };
+    }
+
+    lastErrorMessage = "The site responded but does not expose a WordPress REST API index.";
   }
 
-  throw lastError || new Error("Could not find a valid WordPress REST API index.");
+  throw new Error(
+    lastErrorMessage ||
+      "Could not find a valid WordPress REST API index. Check the site URL, and try Proxy mode if the site blocks cross-origin requests."
+  );
 }

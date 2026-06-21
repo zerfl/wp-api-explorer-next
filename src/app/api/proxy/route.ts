@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { httpRequest } from "@/lib/http";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -27,31 +28,40 @@ export async function GET(req: NextRequest) {
       headers.set("authorization", authHeader);
     }
 
-    const response = await fetch(decodedUrl, {
-      method: "GET",
-      headers,
-      next: { revalidate: 0 }, // Avoid caching to ensure fresh results
-    });
+    // Route through the shared wrapper so a hung upstream can't hang the proxy.
+    const result = await httpRequest(decodedUrl, { headers, timeoutMs: 20000 });
 
-    const body = await response.text();
+    // timeout / network / aborted means we never received an upstream response.
+    if (!result.ok && result.kind !== "http") {
+      return NextResponse.json(
+        { error: "Failed to fetch target URL", details: result.message },
+        { status: 502 }
+      );
+    }
+
+    // Forward the upstream response verbatim — including non-2xx — so the client
+    // can surface WordPress's own error bodies and pagination headers.
+    const status = result.ok ? result.status : result.status ?? 502;
+    const upstreamHeaders = result.headers;
+    const body = result.ok ? result.text : result.body ?? "";
 
     const responseHeaders = new Headers();
     responseHeaders.set(
       "Content-Type",
-      response.headers.get("content-type") || "application/json"
+      upstreamHeaders?.get("content-type") || "application/json"
     );
 
     // Forward crucial WordPress pagination and response headers
-    const wpHeaders = ["x-wp-total", "x-wp-totalpages", "link", "allow"];
+    const wpHeaders = ["x-wp-total", "x-wp-totalpages", "link", "allow", "retry-after"];
     wpHeaders.forEach((headerName) => {
-      const headerVal = response.headers.get(headerName);
+      const headerVal = upstreamHeaders?.get(headerName);
       if (headerVal) {
         responseHeaders.set(headerName, headerVal);
       }
     });
 
     return new Response(body, {
-      status: response.status,
+      status,
       headers: responseHeaders,
     });
   } catch (error: unknown) {
