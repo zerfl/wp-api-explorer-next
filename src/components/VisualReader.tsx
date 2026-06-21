@@ -235,8 +235,8 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                       variant="outline"
                       className={`ml-auto py-0.5 text-xs font-semibold uppercase ${
                         post.status === "publish"
-                          ? "border-green-500/30 bg-green-500/5 text-green-500"
-                          : "border-yellow-500/30 text-yellow-500"
+                          ? "border-success/30 bg-success/5 text-success"
+                          : "border-warning/30 text-warning"
                       }`}
                     >
                       {post.status}
@@ -422,7 +422,7 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                         aria-label={copiedUrl === srcUrl ? "File URL copied" : "Copy file URL"}
                       >
                         {copiedUrl === srcUrl ? (
-                          <Check className="h-4 w-4 text-green-500" aria-hidden="true" />
+                          <Check className="h-4 w-4 text-success" aria-hidden="true" />
                         ) : (
                           <Copy className="h-4 w-4" aria-hidden="true" />
                         )}
@@ -486,8 +486,8 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                     <Badge
                       className={`text-xs font-semibold uppercase ${
                         comment.status === "approved" || comment.status === "approve"
-                          ? "border border-green-500/20 bg-green-500/10 text-green-500"
-                          : "border border-yellow-500/20 bg-yellow-500/10 text-yellow-500"
+                          ? "border border-success/20 bg-success/10 text-success"
+                          : "border border-warning/20 bg-warning/10 text-warning"
                       }`}
                     >
                       {comment.status}
@@ -554,7 +554,7 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                   {user.description}
                 </p>
               ) : (
-                <p className="mt-3.5 w-full border-t border-border/10 pt-3 text-sm italic leading-relaxed text-muted-foreground/50">
+                <p className="mt-3.5 w-full border-t border-border/10 pt-3 text-sm italic leading-relaxed text-muted-foreground/70">
                   No bio description provided.
                 </p>
               )}

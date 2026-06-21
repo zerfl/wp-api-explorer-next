@@ -93,10 +93,10 @@ export default function RequestConsole() {
           <div className="rounded-lg border border-border/40 bg-background/30 p-2.5 flex items-center gap-2.5">
             <div className={`h-9 w-9 rounded-md flex items-center justify-center shrink-0 ${
               metrics.status && metrics.status >= 200 && metrics.status < 300
-                ? "bg-green-500/10 text-green-500"
+                ? "bg-success/10 text-success"
                 : "bg-destructive/10 text-destructive"
             }`}>
-              <Info className="h-4.5 w-4.5" />
+              <Info className="h-4.5 w-4.5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</span>
@@ -108,8 +108,8 @@ export default function RequestConsole() {
 
           {/* Time Metric */}
           <div className="rounded-lg border border-border/40 bg-background/30 p-2.5 flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-md bg-yellow-500/10 text-yellow-500 flex items-center justify-center shrink-0">
-              <Timer className="h-4.5 w-4.5" />
+            <div className="h-9 w-9 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Timer className="h-4.5 w-4.5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Latency</span>
@@ -121,8 +121,8 @@ export default function RequestConsole() {
 
           {/* Total Records Metric */}
           <div className="rounded-lg border border-border/40 bg-background/30 p-2.5 flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-md bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
-              <Files className="h-4.5 w-4.5" />
+            <div className="h-9 w-9 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Files className="h-4.5 w-4.5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Items</span>
@@ -134,8 +134,8 @@ export default function RequestConsole() {
 
           {/* Total Pages Metric */}
           <div className="rounded-lg border border-border/40 bg-background/30 p-2.5 flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-md bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
-              <Layers className="h-4.5 w-4.5" />
+            <div className="h-9 w-9 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Layers className="h-4.5 w-4.5" aria-hidden="true" />
             </div>
             <div className="min-w-0">
               <span className="block text-xs font-bold uppercase tracking-wider text-muted-foreground">Total Pages</span>
@@ -170,7 +170,7 @@ export default function RequestConsole() {
           >
             {copied ? (
               <>
-                <Check className="h-3.5 w-3.5 mr-1 text-green-500" /> Copied!
+                <Check className="h-3.5 w-3.5 mr-1 text-success" aria-hidden="true" /> Copied!
               </>
             ) : (
               <>

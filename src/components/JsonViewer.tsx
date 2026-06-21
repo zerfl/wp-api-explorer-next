@@ -72,7 +72,7 @@ export default function JsonViewer({ data }: JsonViewerProps) {
             className="text-xs h-7 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground font-semibold"
           >
             {copied ? (
-              <Check className="h-3.5 w-3.5 text-green-500" aria-hidden="true" />
+              <Check className="h-3.5 w-3.5 text-success" aria-hidden="true" />
             ) : (
               <Copy className="h-3.5 w-3.5" aria-hidden="true" />
             )}
@@ -184,7 +184,7 @@ function JsonNode({ val, name, isLast, searchQuery, globalExpanded, depth }: Jso
         <span className="text-foreground/70 mr-1">
           {typeof name === "number" ? name : highlightText(String(name))}:
         </span>
-        <span className="text-foreground/50">{isArray ? "[]" : "{}"}</span>
+        <span className="text-foreground/70">{isArray ? "[]" : "{}"}</span>
         {!isLast && <span className="text-foreground/40">,</span>}
       </div>
     );
