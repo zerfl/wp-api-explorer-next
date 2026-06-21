@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { MobileCollectionsNav } from "@/components/CollectionSidebar";
 import { useExplorer } from "@/contexts/ExplorerContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -44,6 +45,7 @@ function ExplorerHeaderComponent() {
     <header className="sticky top-0 z-40 border-b border-border/40 bg-background/95 backdrop-blur-xl">
       <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-2 px-4 md:px-6">
         <div className="flex shrink-0 items-center gap-2">
+          <MobileCollectionsNav />
           <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/15">
             <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
           </div>

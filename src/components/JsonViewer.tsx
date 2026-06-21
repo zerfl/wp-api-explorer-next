@@ -31,7 +31,7 @@ export default function JsonViewer({ data }: JsonViewerProps) {
   };
 
   return (
-    <div className="border border-border/40 rounded-lg bg-background/40 backdrop-blur-md overflow-hidden flex flex-col h-[600px] shadow-sm">
+    <div className="border border-border/40 rounded-lg bg-background/40 backdrop-blur-md overflow-hidden flex flex-col h-[min(600px,70vh)] min-h-[320px] shadow-sm">
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card/20 border-b border-border/30 px-3 py-2.5">
         <div className="flex items-center gap-2">
           <Button

@@ -123,7 +123,7 @@ export default function DataTable({ data }: DataTableProps) {
 
   return (
     <div className="border border-border/40 rounded-lg bg-background/40 backdrop-blur-md overflow-hidden shadow-sm">
-      <ScrollArea className="w-full overflow-x-auto h-[600px]">
+      <ScrollArea className="w-full overflow-x-auto h-[min(600px,70vh)] min-h-[320px]">
         <div className="min-w-full inline-block align-middle">
           <Table className="text-sm select-text">
             <TableCaption className="sr-only">
