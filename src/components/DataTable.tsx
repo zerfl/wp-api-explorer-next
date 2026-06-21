@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +58,7 @@ export default function DataTable({ data }: DataTableProps) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 border border-dashed border-border/60 rounded-lg bg-card/10 text-center space-y-2.5">
-        <TableIcon className="h-10 w-10 text-muted-foreground/55" />
+        <TableIcon className="h-10 w-10 text-muted-foreground/70" aria-hidden="true" />
         <h4 className="text-sm font-semibold text-foreground">No records returned</h4>
         <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
           There is no tabular data to preview because the response is empty.
@@ -125,10 +126,17 @@ export default function DataTable({ data }: DataTableProps) {
       <ScrollArea className="w-full overflow-x-auto h-[600px]">
         <div className="min-w-full inline-block align-middle">
           <Table className="text-sm select-text">
+            <TableCaption className="sr-only">
+              Response data: {items.length} rows across {columns.length} columns.
+            </TableCaption>
             <TableHeader className="bg-card/25 sticky top-0 backdrop-blur-md z-10">
               <TableRow className="border-b border-border/40 hover:bg-transparent">
                 {columns.map((col) => (
-                  <TableHead key={col} className="font-bold text-foreground py-3.5 capitalize px-4 whitespace-nowrap text-sm">
+                  <TableHead
+                    key={col}
+                    scope="col"
+                    className="font-bold text-foreground py-3.5 capitalize px-4 whitespace-nowrap text-sm"
+                  >
                     {col.replace(/_/g, " ")}
                   </TableHead>
                 ))}

@@ -63,11 +63,14 @@ export default function RouteNavigator({
   const filteredCount = Object.values(groupedRoutes).reduce((sum, list) => sum + list.length, 0);
 
   return (
-    <div className="flex flex-col h-full space-y-3 bg-card/10 border border-border/40 rounded-lg p-3.5 backdrop-blur-md">
+    <nav
+      aria-label="API endpoints"
+      className="flex flex-col h-full space-y-3 bg-card/10 border border-border/40 rounded-lg p-3.5 backdrop-blur-md"
+    >
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-            <FolderGit2 className="h-4.5 w-4.5 text-primary" />
+            <FolderGit2 className="h-4.5 w-4.5 text-primary" aria-hidden="true" />
             API Endpoints
           </h3>
           <Badge variant="outline" className="text-xs px-2 py-0 font-semibold">
@@ -77,10 +80,11 @@ export default function RouteNavigator({
           </Badge>
         </div>
         <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <Input
             type="text"
             placeholder="Filter endpoints..."
+            aria-label="Filter endpoints"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9 h-9.5 text-sm bg-background/50 border-border/60"
@@ -97,6 +101,7 @@ export default function RouteNavigator({
                 <button
                   type="button"
                   onClick={() => toggleNamespace(ns)}
+                  aria-expanded={!isCollapsed}
                   className="flex w-full items-center justify-between py-1 text-left hover:text-foreground transition-colors group"
                 >
                   <span className="text-xs font-bold text-muted-foreground group-hover:text-foreground flex items-center gap-1 uppercase tracking-wider">
@@ -120,6 +125,7 @@ export default function RouteNavigator({
                           key={route.path}
                           type="button"
                           onClick={() => onSelectRoute(route)}
+                          aria-current={isActive ? "true" : undefined}
                           className={`flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-xs transition-all ${
                             isActive
                               ? "bg-primary/15 text-primary border border-primary/20 font-semibold"
@@ -127,10 +133,15 @@ export default function RouteNavigator({
                           }`}
                         >
                           <span className="truncate flex items-center gap-1">
-                            <Hash className={`h-3.5 w-3.5 ${isActive ? "text-primary" : "text-muted-foreground/60"}`} />
+                            <Hash
+                              className={`h-3.5 w-3.5 ${isActive ? "text-primary" : "text-muted-foreground/60"}`}
+                              aria-hidden="true"
+                            />
                             {cleanLabel === "/" || cleanLabel === "" ? "/" : cleanLabel}
                           </span>
-                          {isActive && <ArrowRight className="h-3.5 w-3.5 shrink-0 text-primary animate-pulse" />}
+                          {isActive && (
+                            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-primary animate-pulse" aria-hidden="true" />
+                          )}
                         </button>
                       );
                     })}
@@ -147,6 +158,6 @@ export default function RouteNavigator({
           )}
         </div>
       </ScrollArea>
-    </div>
+    </nav>
   );
 }

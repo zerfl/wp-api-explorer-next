@@ -53,10 +53,11 @@ export default function JsonViewer({ data }: JsonViewerProps) {
         </div>
 
         <div className="flex flex-1 max-w-sm relative">
-          <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
           <Input
             type="text"
             placeholder="Search keys or values..."
+            aria-label="Search JSON keys or values"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-7.5 text-xs bg-background/50 border-border/60"
@@ -70,8 +71,12 @@ export default function JsonViewer({ data }: JsonViewerProps) {
             onClick={copyToClipboard}
             className="text-xs h-7 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground font-semibold"
           >
-            {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-            Copy Raw
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-green-500" aria-hidden="true" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {copied ? "Copied" : "Copy Raw"}
           </Button>
           <Button
             size="xs"
@@ -79,7 +84,7 @@ export default function JsonViewer({ data }: JsonViewerProps) {
             onClick={downloadJson}
             className="text-xs h-7 px-2.5 gap-1.5 text-muted-foreground hover:text-foreground font-semibold"
           >
-            <Download className="h-3.5 w-3.5" />
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
             Download
           </Button>
         </div>
@@ -191,12 +196,14 @@ function JsonNode({ val, name, isLast, searchQuery, globalExpanded, depth }: Jso
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded)}
+          aria-expanded={isExpanded}
+          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${name}`}
           className="mr-1 hover:bg-foreground/10 p-0.5 rounded text-muted-foreground shrink-0"
         >
           {isExpanded ? (
-            <ChevronDown className="h-3.5 w-3.5" />
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
           )}
         </button>
         <span
@@ -208,13 +215,13 @@ function JsonNode({ val, name, isLast, searchQuery, globalExpanded, depth }: Jso
         <span className="text-foreground/50 text-xs select-none flex items-center gap-1">
           {isExpanded ? (
             <>
-              {isArray ? <FolderOpen className="h-3.5 w-3.5 inline text-blue-500/80" /> : <FolderOpen className="h-3.5 w-3.5 inline text-purple-500/80" />}
+              {isArray ? <FolderOpen className="h-3.5 w-3.5 inline text-blue-500/80" aria-hidden="true" /> : <FolderOpen className="h-3.5 w-3.5 inline text-purple-500/80" aria-hidden="true" />}
               {isArray ? "Array" : "Object"}{" "}
               <span className="opacity-60">({keys.length} items)</span>
             </>
           ) : (
             <>
-              {isArray ? <FolderClosed className="h-3.5 w-3.5 inline text-blue-500/60" /> : <FolderClosed className="h-3.5 w-3.5 inline text-purple-500/60" />}
+              {isArray ? <FolderClosed className="h-3.5 w-3.5 inline text-blue-500/60" aria-hidden="true" /> : <FolderClosed className="h-3.5 w-3.5 inline text-purple-500/60" aria-hidden="true" />}
               {isArray ? `[...]` : `{...}`}{" "}
               <span className="opacity-60">({keys.length} items)</span>
             </>

@@ -21,7 +21,7 @@ function DisconnectedHeroComponent() {
     <div className="flex min-h-[60vh] items-center justify-center py-8">
       <div className="max-w-3xl text-center">
         <div className="mx-auto mb-5 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 shadow-inner">
-          <Database className="h-8 w-8 text-primary" />
+          <Database className="h-8 w-8 text-primary" aria-hidden="true" />
         </div>
         <h2 className="text-2xl font-bold tracking-tight text-foreground">
           Client-side WordPress Explorer
@@ -33,7 +33,7 @@ function DisconnectedHeroComponent() {
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           <Card className="border-border bg-card/30 backdrop-blur-sm">
             <CardContent className="space-y-2 p-5">
-              <Sparkles className="mx-auto h-5 w-5 text-primary" />
+              <Sparkles className="mx-auto h-5 w-5 text-primary" aria-hidden="true" />
               <h3 className="text-base font-semibold">Bookmarkable collections</h3>
               <p className="text-sm text-muted-foreground">
                 Share direct paths such as `/site/example.com/media/2` and reconnect automatically.
@@ -42,7 +42,7 @@ function DisconnectedHeroComponent() {
           </Card>
           <Card className="border-border bg-card/30 backdrop-blur-sm">
             <CardContent className="space-y-2 p-5">
-              <Terminal className="mx-auto h-5 w-5 text-primary" />
+              <Terminal className="mx-auto h-5 w-5 text-primary" aria-hidden="true" />
               <h3 className="text-base font-semibold">Proxy when needed</h3>
               <p className="text-sm text-muted-foreground">
                 Keep direct requests by default and route through the local proxy only when CORS blocks you.
@@ -51,7 +51,7 @@ function DisconnectedHeroComponent() {
           </Card>
           <Card className="border-border bg-card/30 backdrop-blur-sm">
             <CardContent className="space-y-2 p-5">
-              <ImageIcon className="mx-auto h-5 w-5 text-primary" />
+              <ImageIcon className="mx-auto h-5 w-5 text-primary" aria-hidden="true" />
               <h3 className="text-base font-semibold">Better media browsing</h3>
               <p className="text-sm text-muted-foreground">
                 Preview images, video, audio, PDFs, and files with gallery navigation inside the modal.
@@ -62,7 +62,7 @@ function DisconnectedHeroComponent() {
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
             Try an example
           </span>
           {QUICK_CONNECT_SITES.map((site) => (

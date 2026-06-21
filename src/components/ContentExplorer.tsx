@@ -48,6 +48,13 @@ function ContentExplorerComponent() {
 
   const isSelectedMediaRoute = selectedRoute ? isMediaRoute(selectedRoute.path) : false;
 
+  const resultCount = Array.isArray(responseData) ? responseData.length : responseData ? 1 : 0;
+  const currentPageNumber = Number.parseInt(queryParams.page || "1", 10);
+  const resultLabel = selectedRoute ? getRouteLabel(selectedRoute).toLowerCase() : "items";
+  const resultAnnouncement = `Loaded ${resultCount} ${resultLabel} on page ${currentPageNumber}${
+    metrics?.totalPages ? ` of ${metrics.totalPages}` : ""
+  }.`;
+
   return (
     <div className="space-y-5">
       {selectedRoute ? (
@@ -77,7 +84,7 @@ function ContentExplorerComponent() {
                         void changePerPage(value);
                       }}
                     >
-                      <SelectTrigger className="h-10 w-20 bg-background/60 text-sm">
+                      <SelectTrigger aria-label="Items per page" className="h-10 w-20 bg-background/60 text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -102,10 +109,14 @@ function ContentExplorerComponent() {
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                 <div className={`grid gap-3 ${isSelectedMediaRoute ? "xl:grid-cols-4" : ""}`}>
                   <div className={`relative ${isSelectedMediaRoute ? "xl:col-span-1" : ""}`}>
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Search
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                      aria-hidden="true"
+                    />
                     <Input
                       type="text"
                       placeholder={`Search ${getRouteLabel(selectedRoute).toLowerCase()}...`}
+                      aria-label={`Search ${getRouteLabel(selectedRoute).toLowerCase()}`}
                       value={queryParams.search || ""}
                       onChange={(event) => {
                         setQueryParams((current) => ({
@@ -139,7 +150,7 @@ function ContentExplorerComponent() {
                           });
                         }}
                       >
-                        <SelectTrigger className="h-10 bg-background/60 text-sm">
+                        <SelectTrigger aria-label="Media type" className="h-10 bg-background/60 text-sm">
                           <SelectValue placeholder="Media type" />
                         </SelectTrigger>
                         <SelectContent>
@@ -155,6 +166,7 @@ function ContentExplorerComponent() {
                       <Input
                         type="text"
                         placeholder="MIME type, e.g. image/jpeg"
+                        aria-label="MIME type filter"
                         value={queryParams.mime_type || ""}
                         onChange={(event) => {
                           setQueryParams((current) => ({
@@ -169,6 +181,7 @@ function ContentExplorerComponent() {
                       <Input
                         type="number"
                         placeholder="Parent post ID"
+                        aria-label="Parent post ID filter"
                         value={queryParams.parent || ""}
                         onChange={(event) => {
                           setQueryParams((current) => ({
@@ -202,17 +215,22 @@ function ContentExplorerComponent() {
               <button
                 type="button"
                 onClick={() => setShowDevConsole((current) => !current)}
+                aria-expanded={showDevConsole}
+                aria-controls="developer-tools-panel"
                 className="flex w-full items-center justify-between text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
               >
                 <span className="flex items-center gap-1.5">
-                  <CodeIcon className="h-4 w-4 text-primary" />
+                  <CodeIcon className="h-4 w-4 text-primary" aria-hidden="true" />
                   Developer tools
                 </span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${showDevConsole ? "rotate-180" : ""}`} />
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${showDevConsole ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                />
               </button>
 
               {showDevConsole ? (
-                <div className="mt-3 border-t border-border/20 pt-3">
+                <div id="developer-tools-panel" className="mt-3 border-t border-border/20 pt-3">
                   <RequestConsole />
                 </div>
               ) : null}
@@ -222,15 +240,23 @@ function ContentExplorerComponent() {
       ) : null}
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border/30 bg-card/5 py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="text-sm font-semibold text-muted-foreground">Loading content items...</span>
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border/30 bg-card/5 py-20"
+        >
+          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+          <span className="text-sm font-semibold text-muted-foreground">Loading content items…</span>
         </div>
       ) : null}
 
       {requestError ? (
-        <div className="flex gap-3 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
-          <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
+        <div
+          role="alert"
+          className="flex gap-3 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive"
+        >
+          <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
           <div className="space-y-1">
             <h4 className="text-base font-semibold">Fetch request failed</h4>
             <p>{requestError}</p>
@@ -240,10 +266,13 @@ function ContentExplorerComponent() {
 
       {responseData && !isLoading ? (
         <div className="space-y-3">
+          <p className="sr-only" role="status" aria-live="polite">
+            {resultAnnouncement}
+          </p>
           <Tabs defaultValue="visual" className="w-full">
             <div className="mb-3 flex items-center justify-between border-b border-border/20 pb-1.5">
               <h3 className="flex items-center gap-1.5 text-base font-semibold text-foreground">
-                <Database className="h-4 w-4 text-primary" />
+                <Database className="h-4 w-4 text-primary" aria-hidden="true" />
                 WordPress content payload
               </h3>
               <TabsList className="h-9 bg-background/50 p-0.5">

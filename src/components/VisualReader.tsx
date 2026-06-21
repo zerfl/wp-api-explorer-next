@@ -101,7 +101,7 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center space-y-2.5 rounded-lg border border-dashed border-border/60 bg-card/10 py-12 text-center">
-        <MessageSquare className="h-10 w-10 text-muted-foreground/55" />
+        <MessageSquare className="h-10 w-10 text-muted-foreground/70" aria-hidden="true" />
         <h4 className="text-base font-semibold text-foreground">No records returned</h4>
         <p className="max-w-xs text-sm leading-relaxed text-muted-foreground">
           The query completed successfully but returned an empty dataset. Try adjusting your parameters.
@@ -228,7 +228,7 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
 
               <CardHeader className="space-y-2 p-5 pb-2.5">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Calendar className="h-3.5 w-3.5 shrink-0" />
+                  <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   <span>{formatDate(post.date)}</span>
                   {post.status ? (
                     <Badge
@@ -299,9 +299,9 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-primary"
-                      title="View original link"
+                      aria-label="View original post (opens in a new tab)"
                     >
-                      <LinkIcon className="h-4 w-4" />
+                      <LinkIcon className="h-4 w-4" aria-hidden="true" />
                     </a>
                   </div>
                 ) : null}
@@ -419,12 +419,12 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                         variant="ghost"
                         className="h-8 w-8 text-muted-foreground hover:text-foreground"
                         onClick={() => handleCopyUrl(srcUrl)}
-                        title="Copy URL"
+                        aria-label={copiedUrl === srcUrl ? "File URL copied" : "Copy file URL"}
                       >
                         {copiedUrl === srcUrl ? (
-                          <Check className="h-4 w-4 text-green-500" />
+                          <Check className="h-4 w-4 text-green-500" aria-hidden="true" />
                         ) : (
-                          <Copy className="h-4 w-4" />
+                          <Copy className="h-4 w-4" aria-hidden="true" />
                         )}
                       </Button>
                       <a
@@ -433,9 +433,9 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground"
-                        title="Download file"
+                        aria-label="Download file (opens in a new tab)"
                       >
-                        <Download className="h-4 w-4" />
+                        <Download className="h-4 w-4" aria-hidden="true" />
                       </a>
                     </div>
                   </div>
