@@ -318,7 +318,7 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
 
     return (
       <>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5">
           {mediaItems.map((media) => {
             const mime = media.mime_type || "";
             const mediaKind = getMediaKind(media);

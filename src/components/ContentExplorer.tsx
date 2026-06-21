@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import QueryBuilder from "@/components/QueryBuilder";
 import RequestConsole from "@/components/RequestConsole";
 import VisualReader from "@/components/VisualReader";
@@ -35,16 +36,39 @@ function ContentExplorerComponent() {
     actions: { setQueryParams, executeCurrentRequest, changePerPage },
   } = useRequest();
 
-  if (!connection) {
-    return null;
-  }
-
   const handlePageChange = (page: number) => {
     const nextParams = { ...queryParams, page: String(page) };
     setQueryParams(nextParams);
     syncCurrentBookmark(String(page), "push");
     void executeCurrentRequest(nextParams);
   };
+
+  // Debounced auto-search: only fires for genuine keystrokes, never when the
+  // search term is reset programmatically (e.g. switching collections), so it
+  // can't double-fetch. The request race guard makes rapid typing safe.
+  const searchTerm = queryParams.search || "";
+  const debouncedSearch = useDebouncedValue(searchTerm, 400);
+  const lastSearchedRef = useRef(searchTerm);
+  const userTypedRef = useRef(false);
+
+  const runSearch = useCallback(() => {
+    lastSearchedRef.current = queryParams.search || "";
+    userTypedRef.current = false;
+    syncCurrentBookmark(queryParams.page || "1", "push");
+    void executeCurrentRequest();
+  }, [executeCurrentRequest, queryParams.page, queryParams.search, syncCurrentBookmark]);
+
+  useEffect(() => {
+    if (debouncedSearch === lastSearchedRef.current) {
+      return;
+    }
+    lastSearchedRef.current = debouncedSearch;
+    if (!userTypedRef.current) {
+      return;
+    }
+    userTypedRef.current = false;
+    void executeCurrentRequest();
+  }, [debouncedSearch, executeCurrentRequest]);
 
   const isSelectedMediaRoute = selectedRoute ? isMediaRoute(selectedRoute.path) : false;
 
@@ -54,6 +78,10 @@ function ContentExplorerComponent() {
   const resultAnnouncement = `Loaded ${resultCount} ${resultLabel} on page ${currentPageNumber}${
     metrics?.totalPages ? ` of ${metrics.totalPages}` : ""
   }.`;
+
+  if (!connection) {
+    return null;
+  }
 
   return (
     <div className="space-y-5">
@@ -119,6 +147,7 @@ function ContentExplorerComponent() {
                       aria-label={`Search ${getRouteLabel(selectedRoute).toLowerCase()}`}
                       value={queryParams.search || ""}
                       onChange={(event) => {
+                        userTypedRef.current = true;
                         setQueryParams((current) => ({
                           ...current,
                           search: event.target.value,
@@ -127,7 +156,7 @@ function ContentExplorerComponent() {
                       }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
-                          void executeCurrentRequest();
+                          runSearch();
                         }
                       }}
                       className="h-10 bg-background/60 pl-9 text-sm"
@@ -198,10 +227,7 @@ function ContentExplorerComponent() {
 
                 <div className="flex justify-end">
                   <Button
-                    onClick={() => {
-                      syncCurrentBookmark(queryParams.page || "1", "push");
-                      void executeCurrentRequest();
-                    }}
+                    onClick={runSearch}
                     disabled={isLoading}
                     className="h-10 text-sm"
                   >
