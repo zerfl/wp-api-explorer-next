@@ -69,11 +69,11 @@ export default function DataTable({ data }: DataTableProps) {
 
   const formatCell = (val: unknown) => {
     if (val === null || val === undefined) {
-      return <span className="text-muted-foreground/40 italic">-</span>;
+      return <span className="text-muted-foreground/70 italic">-</span>;
     }
     if (typeof val === "boolean") {
       return (
-        <Badge variant="outline" className={`text-xs ${val ? "text-green-500 border-green-500/20" : "text-muted-foreground"}`}>
+        <Badge variant="outline" className={`text-xs ${val ? "text-success border-success/30" : "text-muted-foreground"}`}>
           {String(val)}
         </Badge>
       );
