@@ -45,7 +45,7 @@ function ExplorerHeaderComponent() {
       <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center gap-2 px-4 md:px-6">
         <div className="flex shrink-0 items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/15">
-            <Globe className="h-4 w-4 text-primary" />
+            <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
           </div>
           <h1 className="hidden text-base font-bold tracking-tight text-foreground sm:block">
             WP Explorer
@@ -69,16 +69,21 @@ function ExplorerHeaderComponent() {
           onAdvancedModeChange={setAdvancedMode}
         />
 
-        <div className="flex shrink-0 items-center rounded-lg border border-border/50 bg-background/50 p-0.5">
+        <div
+          role="group"
+          aria-label="Color theme"
+          className="flex shrink-0 items-center rounded-lg border border-border/50 bg-background/50 p-0.5"
+        >
           <Button
             type="button"
             variant="ghost"
             size="icon"
             onClick={() => setTheme("light")}
             className={`h-7 w-7 ${theme === "light" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
-            title="Light mode"
+            aria-label="Light mode"
+            aria-pressed={theme === "light"}
           >
-            <Sun className="h-3.5 w-3.5" />
+            <Sun className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
           <Button
             type="button"
@@ -86,9 +91,10 @@ function ExplorerHeaderComponent() {
             size="icon"
             onClick={() => setTheme("system")}
             className={`h-7 w-7 ${theme === "system" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
-            title="System theme"
+            aria-label="System theme"
+            aria-pressed={theme === "system"}
           >
-            <Laptop className="h-3.5 w-3.5" />
+            <Laptop className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
           <Button
             type="button"
@@ -96,17 +102,21 @@ function ExplorerHeaderComponent() {
             size="icon"
             onClick={() => setTheme("dark")}
             className={`h-7 w-7 ${theme === "dark" ? "bg-background text-primary shadow-sm" : "text-muted-foreground"}`}
-            title="Dark mode"
+            aria-label="Dark mode"
+            aria-pressed={theme === "dark"}
           >
-            <Moon className="h-3.5 w-3.5" />
+            <Moon className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
         </div>
       </div>
 
       {connectionError ? (
         <div className="mx-auto w-full max-w-[1600px] px-4 pb-2 md:px-6">
-          <div className="flex gap-2 rounded-lg border border-destructive/25 bg-destructive/10 p-2.5 text-sm text-destructive">
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <div
+            role="alert"
+            className="flex gap-2 rounded-lg border border-destructive/25 bg-destructive/10 p-2.5 text-sm text-destructive"
+          >
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <span>{connectionError}</span>
           </div>
         </div>
@@ -179,11 +189,15 @@ function HeaderConnectionControls({
         className="flex min-w-0 flex-1 items-center gap-2"
       >
         <div className="relative min-w-0 flex-1">
-          <Globe className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Globe
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
           <Input
             id="header-site-url"
             type="text"
             placeholder="wordpress-site.com"
+            aria-label="WordPress site URL"
             value={headerUrl}
             onChange={(event) => setHeaderUrl(event.target.value)}
             disabled={isConnecting}
@@ -194,13 +208,14 @@ function HeaderConnectionControls({
         {connection ? (
           <Popover>
             <PopoverTrigger
+              aria-label="Connection details"
               className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-primary/20 bg-primary/10 px-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/15"
             >
               <span className="hidden max-w-[140px] truncate sm:inline">
                 {connection.schema.name || "Connected"}
               </span>
               <span className="sm:hidden">Connected</span>
-              <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              <ChevronDown className="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
             </PopoverTrigger>
             <PopoverContent align="end" sideOffset={8} className="w-72 space-y-3 p-3">
               <div className="space-y-1.5">
@@ -219,7 +234,7 @@ function HeaderConnectionControls({
                   className="inline-flex items-center gap-1 text-sm text-primary transition-colors hover:text-primary/80"
                 >
                   Open site
-                  <ExternalLink className="h-3.5 w-3.5" />
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                 </a>
               </div>
               <div className="border-t border-border/30 pt-2">
@@ -228,7 +243,7 @@ function HeaderConnectionControls({
                   onClick={onDisconnect}
                   className="h-9 w-full gap-1.5 text-sm text-muted-foreground hover:border-destructive/30 hover:text-destructive"
                 >
-                  <Unlink className="h-3.5 w-3.5" />
+                  <Unlink className="h-3.5 w-3.5" aria-hidden="true" />
                   Disconnect
                 </Button>
               </div>
@@ -240,7 +255,7 @@ function HeaderConnectionControls({
             disabled={isConnecting || !headerUrl.trim()}
             className="h-9 shrink-0 gap-1.5 text-sm font-semibold"
           >
-            {isConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            {isConnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
             Connect
           </Button>
         )}
@@ -249,9 +264,9 @@ function HeaderConnectionControls({
       <Popover>
         <PopoverTrigger
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/50 bg-background/50 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
-          title="Connection settings"
+          aria-label="Connection settings"
         >
-          <Settings className="h-4 w-4" />
+          <Settings className="h-4 w-4" aria-hidden="true" />
         </PopoverTrigger>
         <PopoverContent align="end" sideOffset={8} className="w-80 space-y-3 p-3">
           <div className="text-sm font-semibold text-foreground">Connection settings</div>
@@ -277,7 +292,7 @@ function HeaderConnectionControls({
               onClick={() => setHeaderShowAuth((current) => !current)}
               className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
             >
-              <KeyRound className="h-3.5 w-3.5" />
+              <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
               {headerShowAuth ? "Hide authentication" : "Add basic auth"}
             </button>
             {headerShowAuth ? (
