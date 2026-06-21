@@ -21,12 +21,15 @@ import {
 import {
   buildBaseQueryParams,
   ConnectToSiteOptions,
+  extractWpErrorMessage,
   getStoredConnection,
   getStoredPerPage,
   persistConnection,
   ResponseMetrics,
   SiteConnection,
 } from "@/lib/explorer-client";
+import { httpRequest } from "@/lib/http";
+import { useRequestGuard } from "@/lib/use-request-guard";
 import { WpRouteInfo, discoverWpApiRoot, parseWpSchema } from "@/lib/wp-schema";
 
 interface ExplorerProviderProps {
@@ -158,22 +161,30 @@ export default function ExplorerProvider({
     [persistPerPagePreference]
   );
 
-  const fetchJson = useCallback(async (conn: SiteConnection, targetUrl: string) => {
-    const headers = new Headers();
-    if (conn.auth) {
-      const basicHash = btoa(`${conn.auth.username}:${conn.auth.appPassword}`);
-      headers.set("Authorization", `Basic ${basicHash}`);
-    }
+  const fetchJson = useCallback(
+    (conn: SiteConnection, targetUrl: string, signal?: AbortSignal) => {
+      const headers = new Headers();
+      if (conn.auth) {
+        const basicHash = btoa(`${conn.auth.username}:${conn.auth.appPassword}`);
+        headers.set("Authorization", `Basic ${basicHash}`);
+      }
 
-    const fetchUrl = conn.useProxy ? `/api/proxy?url=${encodeURIComponent(targetUrl)}` : targetUrl;
-    return fetch(fetchUrl, {
-      method: "GET",
-      headers,
-    });
-  }, []);
+      const fetchUrl = conn.useProxy
+        ? `/api/proxy?url=${encodeURIComponent(targetUrl)}`
+        : targetUrl;
+      return httpRequest(fetchUrl, { headers, signal });
+    },
+    []
+  );
+
+  // "Latest request wins": aborts the prior request and lets us drop stale
+  // responses so a slow earlier fetch can never overwrite newer state.
+  const requestGuard = useRequestGuard();
 
   const executeApiRequest = useCallback(
     async (conn: SiteConnection, route: WpRouteInfo, params: Record<string, string>) => {
+      const { signal, isCurrent } = requestGuard.begin();
+
       setIsLoading(true);
       setRequestError(null);
       setMetrics(null);
@@ -189,65 +200,70 @@ export default function ExplorerProvider({
         }
       });
 
-      try {
-        const response = await fetchJson(conn, url.toString());
-        const durationMs = Math.round(performance.now() - startTime);
-        const wpTotal = response.headers.get("x-wp-total");
-        const wpTotalPages = response.headers.get("x-wp-totalpages");
+      const result = await fetchJson(conn, url.toString(), signal);
+      const durationMs = Math.round(performance.now() - startTime);
 
-        setMetrics({
-          status: response.status,
-          statusText: response.statusText,
-          timeMs: durationMs,
-          totalRecords: wpTotal ? Number.parseInt(wpTotal, 10) : null,
-          totalPages: wpTotalPages ? Number.parseInt(wpTotalPages, 10) : null,
-        });
-
-        const text = await response.text();
-        let json: unknown = null;
-
-        try {
-          json = JSON.parse(text);
-        } catch {
-          setRequestError(`Invalid JSON response: ${text.substring(0, 120)}...`);
-          setResponseData(null);
-          return;
-        }
-
-        if (!response.ok) {
-          const errorMessage =
-            json && typeof json === "object" && "message" in json && typeof json.message === "string"
-              ? json.message
-              : json && typeof json === "object" && "error" in json && typeof json.error === "string"
-                ? json.error
-                : `HTTP request failed with status ${response.status}: ${response.statusText}`;
-
-          setRequestError(errorMessage);
-          setResponseData(null);
-          return;
-        }
-
-        setResponseData(json);
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        setRequestError(errorMessage || "An error occurred during the fetch request.");
-        setResponseData(null);
-      } finally {
-        setIsLoading(false);
+      // A newer request superseded this one — drop the stale result silently so
+      // it cannot clobber fresher state.
+      if (!isCurrent()) {
+        return;
       }
+
+      if (!result.ok) {
+        if (result.kind === "aborted") {
+          setIsLoading(false);
+          return;
+        }
+
+        let message =
+          result.kind === "http"
+            ? extractWpErrorMessage(result.body) ?? result.message
+            : result.message;
+        if (result.kind === "network" && !conn.useProxy) {
+          message += " If the site blocks cross-origin requests, enable Proxy mode in settings.";
+        }
+
+        setRequestError(message);
+        setResponseData(null);
+        setIsLoading(false);
+        return;
+      }
+
+      const wpTotal = result.headers.get("x-wp-total");
+      const wpTotalPages = result.headers.get("x-wp-totalpages");
+      setMetrics({
+        status: result.status,
+        statusText: result.statusText,
+        timeMs: durationMs,
+        totalRecords: wpTotal ? Number.parseInt(wpTotal, 10) : null,
+        totalPages: wpTotalPages ? Number.parseInt(wpTotalPages, 10) : null,
+      });
+
+      let json: unknown = null;
+      try {
+        json = JSON.parse(result.text);
+      } catch {
+        setRequestError(`Invalid JSON response: ${result.text.substring(0, 120)}...`);
+        setResponseData(null);
+        setIsLoading(false);
+        return;
+      }
+
+      setResponseData(json);
+      setIsLoading(false);
     },
-    [fetchJson]
+    [fetchJson, requestGuard]
   );
 
   const fetchTypeCollections = useCallback(
     async (conn: SiteConnection, parsedRoutes: WpRouteInfo[]) => {
-      try {
-        const response = await fetchJson(conn, `${conn.apiRoot.replace(/\/+$/, "")}/wp/v2/types`);
-        if (!response.ok) {
-          return getCoreCollections(parsedRoutes);
-        }
+      const result = await fetchJson(conn, `${conn.apiRoot.replace(/\/+$/, "")}/wp/v2/types`);
+      if (!result.ok) {
+        return getCoreCollections(parsedRoutes);
+      }
 
-        const json = (await response.json()) as Record<string, WpTypeDefinition>;
+      try {
+        const json = JSON.parse(result.text) as Record<string, WpTypeDefinition>;
         return [...getCoreCollections(parsedRoutes), ...getCustomCollections(parsedRoutes, json)];
       } catch {
         return getCoreCollections(parsedRoutes);

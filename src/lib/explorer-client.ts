@@ -132,3 +132,31 @@ export const buildBaseQueryParams = (
 };
 
 export const isMediaRoute = (routePath: string) => routePath.endsWith("/media");
+
+/**
+ * Pull a human-readable error message out of a WordPress REST error body.
+ * WordPress returns `{ code, message }`; the proxy returns `{ error, details }`.
+ * Returns null when the body isn't JSON or carries no recognizable message.
+ */
+export const extractWpErrorMessage = (body: string | null): string | null => {
+  if (!body) {
+    return null;
+  }
+
+  try {
+    const json: unknown = JSON.parse(body);
+    if (json && typeof json === "object") {
+      const record = json as Record<string, unknown>;
+      if (typeof record.message === "string" && record.message.trim()) {
+        return record.message;
+      }
+      if (typeof record.error === "string" && record.error.trim()) {
+        return record.error;
+      }
+    }
+  } catch {
+    // Body is not JSON — nothing to extract.
+  }
+
+  return null;
+};
