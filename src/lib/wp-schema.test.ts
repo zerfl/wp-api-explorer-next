@@ -157,6 +157,50 @@ describe("discoverWpApiRoot", () => {
     }
   });
 
+  it("canonicalizes to the install root the index self-reports, not the rewrite-inflated deep path", async () => {
+    // Real-world trap: WordPress rewrites an unknown deep path to the root index.php,
+    // so `<deep>/index.php?rest_route=/` answers 200 with the *root* index (which
+    // reports its own url as the host root). Deepest-first discovery must not anchor
+    // the connection to the pasted permalink — it should adopt the reported root.
+    stubFetch(({ target }) => {
+      if (target === "https://example.com/portfolios/hochzeiten/index.php?rest_route=/") {
+        return wpIndex("https://example.com"); // index self-reports the host root
+      }
+      return notFound(); // every `/wp-json` and the deeper index.php forms 404
+    });
+
+    const result = await discoverWpApiRoot("https://example.com/portfolios/hochzeiten/", {
+      useProxy: false,
+    });
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.siteUrl).toBe("https://example.com"); // not /portfolios/hochzeiten
+      expect(result.apiRoot).toBe("https://example.com/index.php?rest_route=/");
+    }
+  });
+
+  it("preserves a genuine subdirectory install's own reported root", async () => {
+    // WP installed under /blog: the index reports /blog as its root, so a pasted
+    // /blog/some-post must collapse to /blog — not all the way to the host root.
+    stubFetch(({ target }) => {
+      if (target === "https://example.com/blog/some-post/index.php?rest_route=/") {
+        return wpIndex("https://example.com/blog");
+      }
+      return notFound();
+    });
+
+    const result = await discoverWpApiRoot("https://example.com/blog/some-post", {
+      useProxy: false,
+    });
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.siteUrl).toBe("https://example.com/blog");
+      expect(result.apiRoot).toBe("https://example.com/blog/index.php?rest_route=/");
+    }
+  });
+
   it("detects CORS: direct blocked at the network layer but the proxy reaches WordPress", async () => {
     stubFetch(({ target, viaProxy }) => {
       if (!viaProxy) {

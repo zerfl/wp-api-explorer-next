@@ -258,6 +258,43 @@ function toWpSchema(text: string, fallbackUrl: string): WpSchema | null {
   return null;
 }
 
+/** Is `ancestor` the same path as, or a parent directory of, `descendant`? */
+function isPathAncestor(ancestor: string, descendant: string): boolean {
+  const a = ancestor.replace(/\/+$/, "");
+  const d = descendant.replace(/\/+$/, "");
+  return d === a || d.startsWith(`${a}/`);
+}
+
+/**
+ * The WordPress REST index self-reports the install's own root in its `url` field.
+ * Prefer it over the probed path. A deep URL (e.g. a pasted permalink) can answer at
+ * `<deep>/index.php?rest_route=/` because WordPress rewrites the unknown path to the
+ * root `index.php`, which otherwise makes deepest-first discovery anchor to the
+ * permalink. The reported root is then a path-ancestor of the probe — collapse to it,
+ * re-anchoring the endpoint form that actually answered. Genuine subdirectory installs
+ * report their own (deeper) root and are preserved. Reports on a different origin, or
+ * that aren't an ancestor of the probe, are ignored for safety.
+ */
+function canonicalInstallRoot(
+  base: string,
+  apiRoot: string,
+  reportedUrl: string
+): { siteUrl: string; apiRoot: string } {
+  try {
+    const reported = normalizeSiteUrl(reportedUrl);
+    if (
+      reported !== base &&
+      new URL(reported).origin === new URL(base).origin &&
+      isPathAncestor(new URL(reported).pathname, new URL(base).pathname)
+    ) {
+      return { siteUrl: reported, apiRoot: `${reported}${apiRoot.slice(base.length)}` };
+    }
+  } catch {
+    // Unparseable self-report — fall back to the probed base.
+  }
+  return { siteUrl: base, apiRoot };
+}
+
 interface WalkResult {
   found: { siteUrl: string; apiRoot: string; schema: WpSchema } | null;
   /** We received a real upstream HTTP response from some candidate (e.g. a 404). */
@@ -294,7 +331,8 @@ async function walkCandidates(candidates: string[], useProxy: boolean): Promise<
       if (result.ok) {
         const schema = toWpSchema(result.text, base);
         if (schema) {
-          return { found: { siteUrl: base, apiRoot, schema }, reachedServer: true, gotNonWpSuccess, transportFailure: false };
+          const install = canonicalInstallRoot(base, apiRoot, schema.url);
+          return { found: { ...install, schema }, reachedServer: true, gotNonWpSuccess, transportFailure: false };
         }
         // 2xx, but not a WordPress index.
         reachedServer = true;
