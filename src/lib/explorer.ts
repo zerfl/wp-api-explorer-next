@@ -1,9 +1,13 @@
-import { WpRouteInfo } from "@/lib/wp-schema";
+import type { WpRouteInfo } from "@/lib/wp-schema";
 
 export const DEFAULT_PER_PAGE = "100";
 export const THEME_STORAGE_KEY = "wp-api-explorer.theme";
 export const PER_PAGE_STORAGE_KEY = "wp-api-explorer.per-page";
 export const CONNECTION_STORAGE_KEY = "wp-api-explorer.connection";
+export const AUTO_PROXY_STORAGE_KEY = "wp-api-explorer.auto-proxy";
+
+/** Upper bound on how many parent paths we probe when walking up to the install root. */
+export const MAX_ROOT_CANDIDATES = 5;
 
 export interface ExplorerBookmark {
   siteUrl: string;
@@ -37,47 +41,65 @@ const CORE_COLLECTIONS = [
 
 const RESERVED_TYPE_SLUGS = new Set(["post", "page", "attachment"]);
 
-export function parseExplorerPath(pathname: string): ExplorerBookmark | null {
-  const segments = pathname.split("/").filter(Boolean);
-  if (segments[0] !== "site" || segments.length < 4) {
-    return null;
-  }
-
-  return parseExplorerSegments(segments.slice(1));
+/**
+ * Encodes a bookmark as a query string on the app root, e.g.
+ * `/?site=https://example.com/blog&type=posts&page=2`.
+ *
+ * The whole site URL — including any subdirectory install path — is carried in a
+ * single `site` value, so it never collides with the target site's own path
+ * structure (a WordPress install at `example.com/site/` round-trips cleanly).
+ */
+export function buildExplorerUrl({ siteUrl, contentType, page }: ExplorerBookmark): string {
+  const params = new URLSearchParams();
+  params.set("site", normalizeSiteUrl(siteUrl));
+  params.set("type", contentType);
+  params.set("page", page);
+  return `/?${params.toString()}`;
 }
 
-export function parseExplorerSegments(segments: string[]): ExplorerBookmark | null {
-  if (segments.length < 3) {
+/**
+ * Parses a bookmark from a query string. Accepts a bare `location.search`
+ * (`?site=…` or `site=…`) or a full `/?site=…` path — everything up to and
+ * including the first `?` is ignored. Returns null when `site`/`type` are absent.
+ */
+export function parseExplorerQuery(search: string): ExplorerBookmark | null {
+  const queryStart = search.indexOf("?");
+  const query = queryStart === -1 ? search : search.slice(queryStart + 1);
+  const params = new URLSearchParams(query);
+  const siteUrl = params.get("site");
+  const contentType = params.get("type");
+  if (!siteUrl || !contentType) {
     return null;
   }
 
-  const decodedSegments = segments.map((segment) => decodeURIComponent(segment));
-  const pageSegment = decodedSegments.at(-1);
-  const contentType = decodedSegments.at(-2);
-  const siteSegments = decodedSegments.slice(0, -2);
-
-  if (!pageSegment || !contentType || siteSegments.length === 0) {
-    return null;
-  }
-
-  const pageNumber = Number.parseInt(pageSegment, 10);
+  const pageNumber = Number.parseInt(params.get("page") ?? "1", 10);
   const page = Number.isFinite(pageNumber) && pageNumber > 0 ? String(pageNumber) : "1";
 
-  return {
-    siteUrl: `https://${siteSegments.join("/")}`,
-    contentType,
-    page,
-  };
+  return { siteUrl, contentType, page };
 }
 
-export function buildExplorerPath({ siteUrl, contentType, page }: ExplorerBookmark): string {
-  const normalizedUrl = normalizeSiteUrl(siteUrl);
-  const url = new URL(normalizedUrl);
-  const siteSegments = [url.host, ...url.pathname.split("/").filter(Boolean)].map((segment) =>
-    encodeURIComponent(segment)
-  );
+/**
+ * Turns a normalized site URL into an ordered list of candidate install roots,
+ * deepest path first and the bare host last. Walking deepest-first means a genuine
+ * subdirectory install (e.g. `example.com/site`) is matched before the host root,
+ * while a pasted post permalink (e.g. `example.com/some-post`) falls through to the
+ * host root once the deeper probes 404. Capped at MAX_ROOT_CANDIDATES.
+ */
+export function buildRootCandidates(normalizedSiteUrl: string): string[] {
+  const url = new URL(normalizedSiteUrl);
+  const segments = url.pathname.split("/").filter(Boolean);
+  const candidates: string[] = [];
 
-  return `/site/${siteSegments.join("/")}/${encodeURIComponent(contentType)}/${encodeURIComponent(page)}`;
+  for (
+    let depth = segments.length;
+    depth >= 0 && candidates.length < MAX_ROOT_CANDIDATES;
+    depth -= 1
+  ) {
+    const path = segments.slice(0, depth).join("/");
+    candidates.push(`${url.protocol}//${url.host}${path ? `/${path}` : ""}`);
+  }
+
+  return candidates;
 }
 
 export function normalizeSiteUrl(siteUrl: string): string {

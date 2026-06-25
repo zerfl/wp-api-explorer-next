@@ -13,6 +13,12 @@ export interface ExplorerState {
   isAdvancedMode: boolean;
   isConnecting: boolean;
   connectionError: string | null;
+  /** Non-error info banner (e.g. "switched to proxy mode because of CORS"). */
+  connectionNotice: string | null;
+  /** A connect attempt failed because of CORS; offer a "Retry with proxy" action. */
+  corsRetryAvailable: boolean;
+  /** User preference: auto-fall back to the proxy when a site blocks CORS. */
+  autoProxy: boolean;
 }
 
 export interface ExplorerActions {
@@ -22,6 +28,10 @@ export interface ExplorerActions {
   navigateCollection: (collection: ContentCollection, page?: string) => Promise<void>;
   setAdvancedMode: (enabled: boolean) => void;
   syncCurrentBookmark: (page: string, mode: "push" | "replace") => void;
+  /** Replay the last connect attempt through the proxy. */
+  retryWithProxy: () => void;
+  dismissConnectionNotice: () => void;
+  setAutoProxy: (enabled: boolean) => void;
 }
 
 export interface ExplorerMeta {

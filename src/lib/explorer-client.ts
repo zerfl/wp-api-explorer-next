@@ -1,6 +1,11 @@
 "use client";
 
-import { DEFAULT_PER_PAGE, PER_PAGE_STORAGE_KEY, CONNECTION_STORAGE_KEY } from "@/lib/explorer";
+import {
+  AUTO_PROXY_STORAGE_KEY,
+  CONNECTION_STORAGE_KEY,
+  DEFAULT_PER_PAGE,
+  PER_PAGE_STORAGE_KEY,
+} from "@/lib/explorer";
 import { WpRouteInfo, WpSchema } from "@/lib/wp-schema";
 
 export type ExplorerTheme = "light" | "dark" | "system";
@@ -60,6 +65,22 @@ export const getStoredPerPage = () => {
   }
 
   return localStorage.getItem(PER_PAGE_STORAGE_KEY) || DEFAULT_PER_PAGE;
+};
+
+export const getStoredAutoProxy = (): boolean => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return localStorage.getItem(AUTO_PROXY_STORAGE_KEY) === "true";
+};
+
+export const persistAutoProxy = (enabled: boolean) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  localStorage.setItem(AUTO_PROXY_STORAGE_KEY, enabled ? "true" : "false");
 };
 
 export const getStoredConnection = (): StoredConnectionSnapshot | null => {

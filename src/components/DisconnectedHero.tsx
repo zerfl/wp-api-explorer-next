@@ -36,7 +36,7 @@ function DisconnectedHeroComponent() {
               <Sparkles className="mx-auto h-5 w-5 text-primary" aria-hidden="true" />
               <h3 className="text-base font-semibold">Bookmarkable collections</h3>
               <p className="text-sm text-muted-foreground">
-                Share direct paths such as `/site/example.com/media/2` and reconnect automatically.
+                Share links such as `/?site=example.com&type=media&page=2` and reconnect automatically.
               </p>
             </CardContent>
           </Card>

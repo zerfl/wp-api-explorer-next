@@ -1,4 +1,5 @@
 import { httpRequest } from "@/lib/http";
+import { buildRootCandidates, normalizeSiteUrl } from "@/lib/explorer";
 
 export interface WpArg {
   type: string;
@@ -208,67 +209,187 @@ export function parseWpSchema(schema: WpSchema): WpRouteInfo[] {
 }
 
 /**
- * Discovers the API root URL from a given WordPress site url.
- * It first checks for the link header or tags, or defaults to appending /wp-json/.
+ * Outcome of WordPress REST API discovery. Policy-free: the caller decides what to do
+ * with a `cors` result (auto-fall back to the proxy, or prompt the user), and the UI
+ * renders the precise message for the failure variants.
  */
-export async function discoverWpApiRoot(siteUrl: string, useProxy: boolean = false): Promise<{ apiRoot: string; schema: WpSchema }> {
-  let cleanedUrl = siteUrl.trim();
-  if (!/^https?:\/\//i.test(cleanedUrl)) {
-    cleanedUrl = "https://" + cleanedUrl;
-  }
-  
-  // Remove trailing slashes
-  cleanedUrl = cleanedUrl.replace(/\/+$/, "");
+export type DiscoverResult =
+  | { status: "ok"; siteUrl: string; apiRoot: string; schema: WpSchema; usedProxy: boolean }
+  | { status: "cors"; siteUrl: string; apiRoot: string; schema: WpSchema }
+  | { status: "not-found"; message: string }
+  | { status: "not-wordpress"; message: string }
+  | { status: "unreachable"; message: string }
+  | { status: "invalid-url"; message: string };
 
-  // Strategy 1: Try checking /wp-json/ index directly
-  const tryApiRoots = [
-    `${cleanedUrl}/wp-json`,
-    `${cleanedUrl}/index.php?rest_route=/`
-  ];
+const NOT_FOUND_MESSAGE =
+  "No WordPress REST API was found at this URL or any parent path. Double-check the address — the REST API may be disabled, or this may not be a WordPress site.";
+const NOT_WORDPRESS_MESSAGE =
+  "This site responded, but does not expose a WordPress REST API. It may not be a WordPress site.";
+const UNREACHABLE_MESSAGE =
+  "The site could not be reached. Check the URL and your connection — the host may be down or the domain misspelled.";
+const INVALID_URL_MESSAGE =
+  "That doesn't look like a valid URL. Check the site address and try again.";
 
-  let lastErrorMessage: string | null = null;
+/** The two endpoint shapes a WordPress REST index can live at, for a given site base. */
+function apiRootsFor(base: string): string[] {
+  return [`${base}/wp-json`, `${base}/index.php?rest_route=/`];
+}
 
-  for (const root of tryApiRoots) {
-    const fetchUrl = useProxy
-      ? `/api/proxy?url=${encodeURIComponent(root)}`
-      : root;
-
-    // Connecting is the critical step, so allow a longer timeout and one retry
-    // for transient failures. httpRequest never throws — it returns a result.
-    const result = await httpRequest(fetchUrl, { timeoutMs: 20000, retries: 1 });
-    if (!result.ok) {
-      lastErrorMessage = result.message;
-      continue;
-    }
-
-    let json: unknown = null;
-    try {
-      json = JSON.parse(result.text);
-    } catch {
-      lastErrorMessage = "The site responded but did not return valid JSON.";
-      continue;
-    }
-
-    // Basic check to see if this is a WordPress schema response
-    if (json && typeof json === "object" && "routes" in json) {
-      const schema = json as Record<string, unknown>;
-      return {
-        apiRoot: root,
-        schema: {
-          name: (schema.name as string) || "WordPress Site",
-          description: (schema.description as string) || "",
-          url: (schema.url as string) || cleanedUrl,
-          namespaces: (schema.namespaces as string[]) || [],
-          routes: schema.routes as WpSchema["routes"],
-        },
-      };
-    }
-
-    lastErrorMessage = "The site responded but does not expose a WordPress REST API index.";
+/** Parse a response body into a WpSchema if it looks like a WordPress REST index. */
+function toWpSchema(text: string, fallbackUrl: string): WpSchema | null {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return null;
   }
 
-  throw new Error(
-    lastErrorMessage ||
-      "Could not find a valid WordPress REST API index. Check the site URL, and try Proxy mode if the site blocks cross-origin requests."
-  );
+  if (json && typeof json === "object" && "routes" in json) {
+    const schema = json as Record<string, unknown>;
+    return {
+      name: (schema.name as string) || "WordPress Site",
+      description: (schema.description as string) || "",
+      url: (schema.url as string) || fallbackUrl,
+      namespaces: (schema.namespaces as string[]) || [],
+      routes: schema.routes as WpSchema["routes"],
+    };
+  }
+
+  return null;
+}
+
+interface WalkResult {
+  found: { siteUrl: string; apiRoot: string; schema: WpSchema } | null;
+  /** We received a real upstream HTTP response from some candidate (e.g. a 404). */
+  reachedServer: boolean;
+  /** A candidate returned 2xx that wasn't a WordPress index. */
+  gotNonWpSuccess: boolean;
+  /**
+   * A host-level transport failure occurred (direct network/timeout — i.e. possible
+   * CORS or host down; or, via the proxy, the proxy could not reach the upstream host).
+   * Because every candidate shares one origin, this is decisive for the whole host.
+   */
+  transportFailure: boolean;
+}
+
+/**
+ * Probe candidate roots (deepest path → host root) over one transport. Keeps walking
+ * past path-level 404s and instant network failures (a cross-origin probe of a
+ * non-REST path — e.g. `/some-post/wp-json` — is CORS-blocked into a `network`
+ * failure even though the shallower real `/wp-json` sends CORS headers and succeeds).
+ * Bails early only on a timeout/abort, where retrying every parent would just stall.
+ */
+async function walkCandidates(candidates: string[], useProxy: boolean): Promise<WalkResult> {
+  let reachedServer = false;
+  let gotNonWpSuccess = false;
+  let transportFailure = false;
+
+  for (const base of candidates) {
+    for (const apiRoot of apiRootsFor(base)) {
+      const fetchUrl = useProxy ? `/api/proxy?url=${encodeURIComponent(apiRoot)}` : apiRoot;
+      // Connecting is the critical step, so allow a longer timeout and one retry.
+      // httpRequest never throws — it returns a discriminated result.
+      const result = await httpRequest(fetchUrl, { timeoutMs: 20000, retries: 1 });
+
+      if (result.ok) {
+        const schema = toWpSchema(result.text, base);
+        if (schema) {
+          return { found: { siteUrl: base, apiRoot, schema }, reachedServer: true, gotNonWpSuccess, transportFailure: false };
+        }
+        // 2xx, but not a WordPress index.
+        reachedServer = true;
+        gotNonWpSuccess = true;
+        continue;
+      }
+
+      if (result.kind === "http") {
+        // The proxy reports an upstream it couldn't reach as a 502 of its own.
+        if (useProxy && result.status === 502) {
+          return { found: null, reachedServer, gotNonWpSuccess, transportFailure: true };
+        }
+        // Any other real status (404, 403, 500…) means the host answered — keep walking.
+        reachedServer = true;
+        continue;
+      }
+
+      // A transport-level failure: the browser/proxy never got an HTTP response.
+      transportFailure = true;
+
+      // timeout | aborted: the host is slow or unreachable, so retrying each parent
+      // path would just stall (20s apiece). Bail and let the proxy diagnose.
+      if (result.kind === "timeout" || result.kind === "aborted") {
+        return { found: null, reachedServer, gotNonWpSuccess, transportFailure: true };
+      }
+
+      // network: fails instantly and is ambiguous — a genuine CORS block on the whole
+      // origin, OR just a non-REST path that carries no CORS header. Keep walking up:
+      // the real REST root (`/wp-json`) may answer directly with CORS headers.
+      continue;
+    }
+  }
+
+  return { found: null, reachedServer, gotNonWpSuccess, transportFailure };
+}
+
+function classifyFailure(walk: WalkResult): DiscoverResult {
+  if (walk.gotNonWpSuccess) {
+    return { status: "not-wordpress", message: NOT_WORDPRESS_MESSAGE };
+  }
+  if (walk.reachedServer) {
+    return { status: "not-found", message: NOT_FOUND_MESSAGE };
+  }
+  return { status: "unreachable", message: UNREACHABLE_MESSAGE };
+}
+
+/**
+ * Discovers the WordPress REST API root for a site, walking up the pasted path to the
+ * install root and (in direct mode) using the proxy to diagnose CORS vs unreachable.
+ *
+ * - Direct success → `ok` (usedProxy: false).
+ * - Proxy-mode success → `ok` (usedProxy: true).
+ * - Direct request blocked at the network layer but the proxy reaches a WordPress
+ *   site → `cors` (reachable + WordPress, the browser just can't fetch it directly).
+ * - Otherwise a precise failure: `not-found` / `not-wordpress` / `unreachable`.
+ *
+ * `siteUrl` on a success/`cors` result is the canonical install root that actually
+ * answered — not the raw URL the user pasted.
+ */
+export async function discoverWpApiRoot(
+  siteUrl: string,
+  opts: { useProxy?: boolean } = {}
+): Promise<DiscoverResult> {
+  const useProxy = opts.useProxy ?? false;
+
+  let candidates: string[];
+  try {
+    candidates = buildRootCandidates(normalizeSiteUrl(siteUrl));
+  } catch {
+    return { status: "invalid-url", message: INVALID_URL_MESSAGE };
+  }
+
+  // Proxy mode chosen up front: probe candidates server-side only.
+  if (useProxy) {
+    const proxy = await walkCandidates(candidates, true);
+    return proxy.found
+      ? { status: "ok", usedProxy: true, ...proxy.found }
+      : classifyFailure(proxy);
+  }
+
+  // Direct mode: try the browser first.
+  const direct = await walkCandidates(candidates, false);
+  if (direct.found) {
+    return { status: "ok", usedProxy: false, ...direct.found };
+  }
+  if (!direct.transportFailure) {
+    // We reached the server(s) directly but found no WordPress — the proxy won't help.
+    return classifyFailure(direct);
+  }
+
+  // Direct failed at the network layer (CORS block or host down) — diagnose via the
+  // proxy, which is immune to CORS and can see the real upstream status.
+  const probe = await walkCandidates(candidates, true);
+  if (probe.found) {
+    return { status: "cors", ...probe.found };
+  }
+  return classifyFailure(probe);
 }

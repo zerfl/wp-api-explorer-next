@@ -21,11 +21,23 @@ Layout (Sidebar + Main Panel)
 
 ## Component Details & Responsibilities
 
-### `SiteSelector`
-- Maintains `siteUrl` input and verifies it points to a WordPress site.
-- Attempts to discover the API root via `GET /wp-json/`.
-- Populates `routes` state from `/wp-json/` index or falls back to core endpoints.
-- Lists pre-defined WordPress bookmarks for instant connection.
+### Connection controls (`ExplorerHeader` / `ExplorerProvider`)
+- Maintains the `siteUrl` input and verifies it points to a WordPress site.
+- Discovers the API root via `discoverWpApiRoot`, which **walks up** a pasted subpage/subdirectory URL to the install root and canonicalizes the connection to the root that actually answered (see `docs/API_EXPLAINER.md` §1).
+- Populates `routes` state from the `/wp-json/` index or falls back to core endpoints.
+- Surfaces precise connection outcomes, including a **CORS** result with a "Retry with proxy" action and an opt-in **auto-proxy** toggle (`ExplorerHeader` settings popover).
+
+## Bookmarks & URL state
+
+Explorer state (selected site, content type, page) is encoded as a **query string on the app root**:
+
+```
+/?site=<normalized-site-url>&type=<content-type>&page=<n>
+```
+
+- `buildExplorerUrl` / `parseExplorerQuery` (`src/lib/explorer.ts`) are the single encode/decode pair. The whole site URL — including any subdirectory install path — lives in the single `site` value, so it never collides with the target site's own paths (a WordPress install at `example.com/site/` round-trips cleanly). This replaced the earlier `/site/[…segments]` route, which reserved a path prefix that conflicted with subdirectory installs.
+- `ExplorerProvider` tracks `location.search` directly (initialized on mount, updated on `popstate`) and derives the bookmark with `useMemo`. It intentionally does **not** use `useSearchParams()`, which would force a whole-page CSR bailout.
+- Navigations call `history.pushState`/`replaceState` and keep `search` state in sync; on load, a present bookmark auto-connects to its site.
 
 ### `RouteNavigator`
 - Displays searchable lists of namespaces (e.g. `wp/v2`) and endpoints.

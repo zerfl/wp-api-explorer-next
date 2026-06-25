@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code — personal, machine-specific overrides (e.g. nvm PATH)
+.claude/settings.local.json

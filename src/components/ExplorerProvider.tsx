@@ -5,7 +5,7 @@ import { ExplorerContext, ExplorerContextValue } from "@/contexts/ExplorerContex
 import { RequestContext, RequestContextValue } from "@/contexts/RequestContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import {
-  buildExplorerPath,
+  buildExplorerUrl,
   ContentCollection,
   DEFAULT_PER_PAGE,
   findCollectionByRoutePath,
@@ -14,7 +14,7 @@ import {
   getCustomCollections,
   humanizeSegment,
   normalizeSiteUrl,
-  parseExplorerPath,
+  parseExplorerQuery,
   PER_PAGE_STORAGE_KEY,
   WpTypeDefinition,
 } from "@/lib/explorer";
@@ -22,26 +22,27 @@ import {
   buildBaseQueryParams,
   ConnectToSiteOptions,
   extractWpErrorMessage,
+  getStoredAutoProxy,
   getStoredConnection,
   getStoredPerPage,
+  persistAutoProxy,
   persistConnection,
   ResponseMetrics,
   SiteConnection,
 } from "@/lib/explorer-client";
 import { httpRequest } from "@/lib/http";
 import { useRequestGuard } from "@/lib/use-request-guard";
-import { WpRouteInfo, discoverWpApiRoot, parseWpSchema } from "@/lib/wp-schema";
+import { WpRouteInfo, WpSchema, discoverWpApiRoot, parseWpSchema } from "@/lib/wp-schema";
 
 interface ExplorerProviderProps {
   children: React.ReactNode;
-  initialPathname?: string;
 }
 
-export default function ExplorerProvider({
-  children,
-  initialPathname = "/",
-}: ExplorerProviderProps) {
-  const [pathname, setPathname] = useState(initialPathname);
+export default function ExplorerProvider({ children }: ExplorerProviderProps) {
+  // Bookmarks live in the query string (?site=…&type=…&page=…). We track
+  // `location.search` directly (no useSearchParams, which would force a whole-page
+  // CSR bailout) and initialize it from the browser on mount.
+  const [search, setSearch] = useState("");
 
   const [connection, setConnection] = useState<SiteConnection | null>(null);
   const [routes, setRoutes] = useState<WpRouteInfo[]>([]);
@@ -60,12 +61,18 @@ export default function ExplorerProvider({
   const [responseData, setResponseData] = useState<unknown>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
+  const [corsRetryAvailable, setCorsRetryAvailable] = useState(false);
+  const [autoProxy, setAutoProxyState] = useState(false);
   const [metrics, setMetrics] = useState<ResponseMetrics | null>(null);
 
-  const [hydratedBookmarkPath, setHydratedBookmarkPath] = useState<string | null>(null);
-  const [internalNavigationPath, setInternalNavigationPath] = useState<string | null>(null);
+  const [hydratedBookmarkSearch, setHydratedBookmarkSearch] = useState<string | null>(null);
+  const [internalNavigationSearch, setInternalNavigationSearch] = useState<string | null>(null);
 
-  const bookmark = useMemo(() => parseExplorerPath(pathname), [pathname]);
+  // Remembers the last connect attempt so "Retry with proxy" can replay it.
+  const [lastConnectOptions, setLastConnectOptions] = useState<ConnectToSiteOptions | null>(null);
+
+  const bookmark = useMemo(() => parseExplorerQuery(search), [search]);
 
   const selectedCollection = useMemo(() => {
     if (!selectedRoute) {
@@ -108,11 +115,18 @@ export default function ExplorerProvider({
     }
 
     const handlePopState = () => {
-      setPathname(window.location.pathname);
+      setSearch(window.location.search);
     };
 
     window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
+    // Initialize from the current URL, deferred so we don't setState synchronously
+    // inside the effect body.
+    const timeoutId = window.setTimeout(() => setSearch(window.location.search), 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener("popstate", handlePopState);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,8 +135,10 @@ export default function ExplorerProvider({
     }
 
     const savedPerPage = getStoredPerPage();
+    const savedAutoProxy = getStoredAutoProxy();
     const timeoutId = window.setTimeout(() => {
       setPerPagePreference(savedPerPage);
+      setAutoProxyState(savedAutoProxy);
       setQueryParamsState((current) => ({
         ...current,
         per_page: current.per_page || savedPerPage,
@@ -131,6 +147,15 @@ export default function ExplorerProvider({
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  const setAutoProxy = useCallback((enabled: boolean) => {
+    persistAutoProxy(enabled);
+    setAutoProxyState(enabled);
+  }, []);
+
+  const dismissConnectionNotice = useCallback(() => {
+    setConnectionNotice(null);
   }, []);
 
   const clearRequestState = useCallback(() => {
@@ -278,29 +303,31 @@ export default function ExplorerProvider({
         return;
       }
 
-      const nextPath = buildExplorerPath({
+      const nextUrl = buildExplorerUrl({
         siteUrl,
         contentType: collection.slug,
         page,
       });
+      // `nextUrl` is `/?…`; strip the leading slash to compare with location.search.
+      const nextSearch = nextUrl.slice(1);
 
-      if (nextPath === pathname) {
+      if (nextSearch === search) {
         return;
       }
 
-      setInternalNavigationPath(nextPath);
+      setInternalNavigationSearch(nextSearch);
 
       if (typeof window !== "undefined") {
         if (mode === "replace") {
-          window.history.replaceState({}, "", nextPath);
+          window.history.replaceState({}, "", nextUrl);
         } else {
-          window.history.pushState({}, "", nextPath);
+          window.history.pushState({}, "", nextUrl);
         }
 
-        setPathname(nextPath);
+        setSearch(nextSearch);
       }
     },
-    [pathname]
+    [search]
   );
 
   const resetForRoute = useCallback(
@@ -314,27 +341,59 @@ export default function ExplorerProvider({
   );
 
   const connectToSite = useCallback(
-    async ({
-      siteUrl,
-      useProxy,
-      auth,
-      desiredContentType,
-      desiredPage,
-      desiredRoutePath,
-      navigationMode,
-    }: ConnectToSiteOptions) => {
+    async (options: ConnectToSiteOptions) => {
+      const {
+        siteUrl,
+        useProxy,
+        auth,
+        desiredContentType,
+        desiredPage,
+        desiredRoutePath,
+        navigationMode,
+      } = options;
+
       setIsConnecting(true);
       setConnectionError(null);
+      setConnectionNotice(null);
+      setCorsRetryAvailable(false);
+      setLastConnectOptions(options);
 
       try {
-        const normalizedSiteUrl = normalizeSiteUrl(siteUrl);
-        const { apiRoot, schema } = await discoverWpApiRoot(normalizedSiteUrl, useProxy);
-        const parsedRoutes = parseWpSchema(schema);
+        const result = await discoverWpApiRoot(siteUrl, { useProxy });
+
+        // Resolve the transport and canonical install root, applying the CORS policy.
+        let effectiveProxy = useProxy;
+        let resolved: { siteUrl: string; apiRoot: string; schema: WpSchema };
+
+        if (result.status === "ok") {
+          effectiveProxy = result.usedProxy;
+          resolved = { siteUrl: result.siteUrl, apiRoot: result.apiRoot, schema: result.schema };
+        } else if (result.status === "cors") {
+          if (autoProxy) {
+            effectiveProxy = true;
+            resolved = { siteUrl: result.siteUrl, apiRoot: result.apiRoot, schema: result.schema };
+            setConnectionNotice(
+              "This site blocks cross-origin browser requests (CORS), so the explorer switched to proxy mode."
+            );
+          } else {
+            setConnectionError(
+              "This site blocks cross-origin browser requests (CORS). It’s reachable and is WordPress — retry with proxy mode to load it."
+            );
+            setCorsRetryAvailable(true);
+            return;
+          }
+        } else {
+          setConnectionError(result.message);
+          return;
+        }
+
+        const canonicalSiteUrl = resolved.siteUrl;
+        const parsedRoutes = parseWpSchema(resolved.schema);
         const nextConnection: SiteConnection = {
-          siteUrl: normalizedSiteUrl,
-          apiRoot,
-          schema,
-          useProxy,
+          siteUrl: canonicalSiteUrl,
+          apiRoot: resolved.apiRoot,
+          schema: resolved.schema,
+          useProxy: effectiveProxy,
           auth,
         };
 
@@ -368,17 +427,18 @@ export default function ExplorerProvider({
         clearRequestState();
 
         persistConnection({
-          siteUrl: normalizedSiteUrl,
-          useProxy,
+          siteUrl: canonicalSiteUrl,
+          useProxy: effectiveProxy,
           auth,
         });
 
         if (defaultRoute) {
           const collection = findCollectionByRoutePath(nextCollections, defaultRoute.path);
-          syncBookmarkUrl(collection, normalizedSiteUrl, nextParams.page || "1", navigationMode);
+          syncBookmarkUrl(collection, canonicalSiteUrl, nextParams.page || "1", navigationMode);
           await executeApiRequest(nextConnection, defaultRoute, nextParams);
         }
       } catch (error: unknown) {
+        // discoverWpApiRoot never throws, but the follow-up collection fetch could.
         const errorMessage = error instanceof Error ? error.message : String(error);
         setConnectionError(
           errorMessage ||
@@ -388,24 +448,32 @@ export default function ExplorerProvider({
         setIsConnecting(false);
       }
     },
-    [clearRequestState, executeApiRequest, fetchTypeCollections, perPagePreference, syncBookmarkUrl]
+    [autoProxy, clearRequestState, executeApiRequest, fetchTypeCollections, perPagePreference, syncBookmarkUrl]
   );
+
+  const retryWithProxy = useCallback(() => {
+    if (!lastConnectOptions) {
+      return;
+    }
+
+    void connectToSite({ ...lastConnectOptions, useProxy: true });
+  }, [connectToSite, lastConnectOptions]);
 
   useEffect(() => {
     if (!preferencesReady || !bookmark) {
       return;
     }
 
-    if (internalNavigationPath === pathname) {
+    if (internalNavigationSearch === search) {
       const timeoutId = window.setTimeout(() => {
-        setInternalNavigationPath(null);
-        setHydratedBookmarkPath(pathname);
+        setInternalNavigationSearch(null);
+        setHydratedBookmarkSearch(search);
       }, 0);
 
       return () => window.clearTimeout(timeoutId);
     }
 
-    if (hydratedBookmarkPath === pathname) {
+    if (hydratedBookmarkSearch === search) {
       return;
     }
 
@@ -422,7 +490,7 @@ export default function ExplorerProvider({
 
       if (!targetCollection || !targetRoute) {
         const timeoutId = window.setTimeout(() => {
-          setHydratedBookmarkPath(pathname);
+          setHydratedBookmarkSearch(search);
         }, 0);
 
         return () => window.clearTimeout(timeoutId);
@@ -433,14 +501,14 @@ export default function ExplorerProvider({
 
       if (routeMatches && pageMatches) {
         const timeoutId = window.setTimeout(() => {
-          setHydratedBookmarkPath(pathname);
+          setHydratedBookmarkSearch(search);
         }, 0);
 
         return () => window.clearTimeout(timeoutId);
       }
 
       const timeoutId = window.setTimeout(() => {
-        setHydratedBookmarkPath(pathname);
+        setHydratedBookmarkSearch(search);
         const nextParams = routeMatches
           ? { ...queryParams, page: bookmark.page }
           : buildBaseQueryParams(targetRoute, perPagePreference, {
@@ -463,7 +531,7 @@ export default function ExplorerProvider({
       normalizeSiteUrl(storedConnection.siteUrl) === normalizedBookmarkSite;
 
     const timeoutId = window.setTimeout(() => {
-      setHydratedBookmarkPath(pathname);
+      setHydratedBookmarkSearch(search);
       void connectToSite({
         siteUrl: bookmark.siteUrl,
         useProxy: matchesStoredSite ? storedConnection.useProxy : false,
@@ -482,9 +550,9 @@ export default function ExplorerProvider({
     connectToSite,
     connection,
     executeApiRequest,
-    hydratedBookmarkPath,
-    internalNavigationPath,
-    pathname,
+    hydratedBookmarkSearch,
+    internalNavigationSearch,
+    search,
     perPagePreference,
     preferencesReady,
     queryParams,
@@ -593,15 +661,17 @@ export default function ExplorerProvider({
     clearRequestState();
     setIsLoading(false);
     setConnectionError(null);
+    setConnectionNotice(null);
+    setCorsRetryAvailable(false);
     persistConnection(null);
-    setHydratedBookmarkPath(null);
-    setInternalNavigationPath(null);
+    setHydratedBookmarkSearch(null);
+    setInternalNavigationSearch(null);
 
-    if (pathname !== "/" && typeof window !== "undefined") {
+    if (search !== "" && typeof window !== "undefined") {
       window.history.replaceState({}, "", "/");
-      setPathname("/");
+      setSearch("");
     }
-  }, [clearRequestState, pathname]);
+  }, [clearRequestState, search]);
 
   const getRouteLabel = useCallback(
     (route: WpRouteInfo) => {
@@ -626,6 +696,9 @@ export default function ExplorerProvider({
         isAdvancedMode,
         isConnecting,
         connectionError,
+        connectionNotice,
+        corsRetryAvailable,
+        autoProxy,
       },
       actions: {
         connectToSite,
@@ -634,6 +707,9 @@ export default function ExplorerProvider({
         navigateCollection,
         setAdvancedMode,
         syncCurrentBookmark,
+        retryWithProxy,
+        dismissConnectionNotice,
+        setAutoProxy,
       },
       meta: {
         selectedCollection,
@@ -645,23 +721,29 @@ export default function ExplorerProvider({
       },
     }),
     [
+      autoProxy,
       bookmark?.contentType,
       bookmark?.siteUrl,
       connectToSite,
       connection,
       connectionError,
+      connectionNotice,
+      corsRetryAvailable,
       coreCollections,
       customCollections,
+      dismissConnectionNotice,
       disconnect,
       getRouteLabel,
       isAdvancedMode,
       isConnecting,
       navigateCollection,
+      retryWithProxy,
       routes,
       selectRoute,
       selectedCollection,
       selectedRoute,
       setAdvancedMode,
+      setAutoProxy,
       syncCurrentBookmark,
       collections,
     ]

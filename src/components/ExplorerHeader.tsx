@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ExternalLink,
   Globe,
+  Info,
   KeyRound,
   Laptop,
   Loader2,
@@ -21,12 +22,29 @@ import {
   ShieldAlert,
   Sun,
   Unlink,
+  X,
 } from "lucide-react";
 
 function ExplorerHeaderComponent() {
   const {
-    state: { connection, selectedRoute, isAdvancedMode, isConnecting, connectionError },
-    actions: { connectToSite, disconnect, setAdvancedMode },
+    state: {
+      connection,
+      selectedRoute,
+      isAdvancedMode,
+      isConnecting,
+      connectionError,
+      connectionNotice,
+      corsRetryAvailable,
+      autoProxy,
+    },
+    actions: {
+      connectToSite,
+      disconnect,
+      setAdvancedMode,
+      retryWithProxy,
+      dismissConnectionNotice,
+      setAutoProxy,
+    },
     meta: { selectedCollection, suggestedSiteUrl, bookmarkContentType },
   } = useExplorer();
   const {
@@ -66,9 +84,11 @@ function ExplorerHeaderComponent() {
           initialUsername={connection?.auth?.username || ""}
           initialAppPassword={connection?.auth?.appPassword || ""}
           initialShowAuth={Boolean(connection?.auth)}
+          autoProxy={autoProxy}
           onConnect={connectToSite}
           onDisconnect={disconnect}
           onAdvancedModeChange={setAdvancedMode}
+          onAutoProxyChange={setAutoProxy}
         />
 
         <div
@@ -116,10 +136,44 @@ function ExplorerHeaderComponent() {
         <div className="mx-auto w-full max-w-[1600px] px-4 pb-2 md:px-6">
           <div
             role="alert"
-            className="flex gap-2 rounded-lg border border-destructive/25 bg-destructive/10 p-2.5 text-sm text-destructive"
+            className="flex items-start gap-2 rounded-lg border border-destructive/25 bg-destructive/10 p-2.5 text-sm text-destructive"
           >
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{connectionError}</span>
+            <span className="flex-1">{connectionError}</span>
+            {corsRetryAvailable ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={retryWithProxy}
+                disabled={isConnecting}
+                className="h-7 shrink-0 gap-1.5 border-destructive/30 text-sm font-semibold text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                {isConnecting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : null}
+                Retry with proxy
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {connectionNotice ? (
+        <div className="mx-auto w-full max-w-[1600px] px-4 pb-2 md:px-6">
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-lg border border-primary/25 bg-primary/10 p-2.5 text-sm text-foreground"
+          >
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <span className="flex-1">{connectionNotice}</span>
+            <button
+              type="button"
+              onClick={dismissConnectionNotice}
+              aria-label="Dismiss notice"
+              className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
         </div>
       ) : null}
@@ -138,9 +192,11 @@ interface HeaderConnectionControlsProps {
   initialUsername: string;
   initialAppPassword: string;
   initialShowAuth: boolean;
+  autoProxy: boolean;
   onConnect: ReturnType<typeof useExplorer>["actions"]["connectToSite"];
   onDisconnect: ReturnType<typeof useExplorer>["actions"]["disconnect"];
   onAdvancedModeChange: ReturnType<typeof useExplorer>["actions"]["setAdvancedMode"];
+  onAutoProxyChange: ReturnType<typeof useExplorer>["actions"]["setAutoProxy"];
 }
 
 function HeaderConnectionControls({
@@ -154,9 +210,11 @@ function HeaderConnectionControls({
   initialUsername,
   initialAppPassword,
   initialShowAuth,
+  autoProxy,
   onConnect,
   onDisconnect,
   onAdvancedModeChange,
+  onAutoProxyChange,
 }: HeaderConnectionControlsProps) {
   const [headerUrl, setHeaderUrl] = useState(initialUrl);
   const [headerUseProxy, setHeaderUseProxy] = useState(initialUseProxy);
@@ -284,6 +342,23 @@ function HeaderConnectionControls({
               id="settings-proxy"
               checked={headerUseProxy}
               onCheckedChange={setHeaderUseProxy}
+              disabled={isConnecting}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border border-border/40 bg-background/40 px-3 py-2">
+            <div className="min-w-0 pr-2">
+              <Label htmlFor="settings-auto-proxy" className="cursor-pointer text-sm font-semibold">
+                Auto-use proxy on CORS
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                If a site blocks direct browser requests, connect through the proxy automatically.
+              </p>
+            </div>
+            <Switch
+              id="settings-auto-proxy"
+              checked={autoProxy}
+              onCheckedChange={onAutoProxyChange}
               disabled={isConnecting}
             />
           </div>

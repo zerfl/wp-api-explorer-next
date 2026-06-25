@@ -7,13 +7,9 @@ import ContentExplorer from "@/components/ContentExplorer";
 import DisconnectedHero from "@/components/DisconnectedHero";
 import { useExplorer } from "@/contexts/ExplorerContext";
 
-interface ExplorerAppProps {
-  initialPathname?: string;
-}
-
-export default function ExplorerApp({ initialPathname = "/" }: ExplorerAppProps) {
+export default function ExplorerApp() {
   return (
-    <ExplorerProvider initialPathname={initialPathname}>
+    <ExplorerProvider>
       <div className="flex min-h-screen flex-col bg-background">
         <a
           href="#main-content"
