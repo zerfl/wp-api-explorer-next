@@ -5,6 +5,7 @@ export const THEME_STORAGE_KEY = "wp-api-explorer.theme";
 export const PER_PAGE_STORAGE_KEY = "wp-api-explorer.per-page";
 export const CONNECTION_STORAGE_KEY = "wp-api-explorer.connection";
 export const AUTO_PROXY_STORAGE_KEY = "wp-api-explorer.auto-proxy";
+export const WINDOWED_SITES_STORAGE_KEY = "wp-api-explorer.windowed-sites";
 
 /** Upper bound on how many parent paths we probe when walking up to the install root. */
 export const MAX_ROOT_CANDIDATES = 5;

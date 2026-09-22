@@ -39,6 +39,10 @@ Explorer state (selected site, content type, page) is encoded as a **query strin
 - `ExplorerProvider` tracks `location.search` directly (initialized on mount, updated on `popstate`) and derives the bookmark with `useMemo`. It intentionally does **not** use `useSearchParams()`, which would force a whole-page CSR bailout.
 - Navigations call `history.pushState`/`replaceState` and keep `search` state in sync; on load, a present bookmark auto-connects to its site.
 
+## Date-window listing mode
+
+For routes whose schema accepts both `after` and `before`, the explorer offers a "date windows" listing mode that walks the date axis in adaptive windows instead of paging the full collection (see `docs/API_EXPLAINER.md` §5 for why some large sites time out on unbounded requests). `executeApiRequest` branches into a windowed path that drives `src/lib/windowed-walk.ts`, a framework-agnostic walker with a persistent cursor; the walker and its live mode flag are held per-provider in `src/lib/use-walker-store.ts` (refs behind method calls, like `useRequestGuard`). A batch is one `page` worth of the collected, deduped items. The mode is opt-in per site and persisted in sessionStorage under `wp-api-explorer.windowed-sites` (a JSON array of canonical site URLs); on connect the mode is on when the site is in that list.
+
 ### `RouteNavigator`
 - Displays searchable lists of namespaces (e.g. `wp/v2`) and endpoints.
 - Tracks `selectedRoute` state (default: `/wp/v2/posts`).

@@ -37,4 +37,22 @@ describe("SmartPagination", () => {
     expect(screen.getByRole("button", { name: /previous page/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /next page/i })).toBeInTheDocument();
   });
+
+  it("disables Next in the no-total fallback when hasNextPage is false", () => {
+    const onPageChange = vi.fn();
+    render(
+      <SmartPagination
+        currentPage={1}
+        totalPages={null}
+        isLoading={false}
+        onPageChange={onPageChange}
+        hasNextPage={false}
+      />
+    );
+
+    const next = screen.getByRole("button", { name: /next page/i });
+    expect(next).toBeDisabled();
+    fireEvent.click(next);
+    expect(onPageChange).not.toHaveBeenCalled();
+  });
 });

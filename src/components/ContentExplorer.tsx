@@ -9,11 +9,13 @@ import DataTable from "@/components/DataTable";
 import JsonViewer from "@/components/JsonViewer";
 import { useExplorer } from "@/contexts/ExplorerContext";
 import { useRequest } from "@/contexts/RequestContext";
-import { isMediaRoute } from "@/lib/explorer-client";
+import { isMediaRoute, supportsDateWindows } from "@/lib/explorer-client";
+import type { WalkEvent } from "@/lib/windowed-walk";
 import { SmartPagination } from "@/components/SmartPagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
   ChevronDown,
@@ -24,6 +26,21 @@ import {
   ShieldAlert,
 } from "lucide-react";
 
+function formatWalkEvent(event: WalkEvent): string {
+  switch (event.type) {
+    case "probe":
+      return "probe: 1-day window ok";
+    case "window":
+      return `${event.after.slice(0, 10)} → ${event.before.slice(0, 10)} · ${event.spanDays} d · ${event.itemCount} items · ${event.pages} pages`;
+    case "halved":
+      return `${event.after.slice(0, 10)} → ${event.before.slice(0, 10)} · ${event.spanDays} d · too slow, halving to ${event.nextSpanDays} d`;
+    case "unavailable":
+      return `${event.after.slice(0, 10)} → ${event.before.slice(0, 10)} · no response, giving up`;
+    default:
+      return "";
+  }
+}
+
 function ContentExplorerComponent() {
   const [showDevConsole, setShowDevConsole] = useState(false);
   const {
@@ -32,9 +49,26 @@ function ContentExplorerComponent() {
     meta: { selectedCollection, getRouteLabel },
   } = useExplorer();
   const {
-    state: { queryParams, isLoading, responseData, requestError, metrics },
-    actions: { setQueryParams, executeCurrentRequest, changePerPage },
+    state: {
+      queryParams,
+      isLoading,
+      responseData,
+      requestError,
+      requestFailure,
+      metrics,
+      windowedMode,
+      windowProgress,
+    },
+    actions: { setQueryParams, executeCurrentRequest, changePerPage, setWindowedMode, stopWindowedWalk },
   } = useRequest();
+
+  const routeSupportsWindows = selectedRoute ? supportsDateWindows(selectedRoute) : false;
+  const showWindowedResume =
+    routeSupportsWindows &&
+    !windowedMode &&
+    !!requestFailure &&
+    (requestFailure.kind === "timeout" ||
+      (requestFailure.kind === "http" && (requestFailure.status ?? 0) >= 500));
 
   const handlePageChange = (page: number) => {
     const nextParams = { ...queryParams, page: String(page) };
@@ -102,8 +136,25 @@ function ContentExplorerComponent() {
                   <h3 className="text-lg font-semibold text-foreground">
                     {selectedCollection?.label || getRouteLabel(selectedRoute)}
                   </h3>
+                  {windowedMode ? (
+                    <p className="text-sm text-muted-foreground">
+                      Date-window listing · batch {windowProgress?.batch ?? currentPageNumber} ·{" "}
+                      {windowProgress?.itemsCollected ?? 0} items collected
+                      {windowProgress?.walkedTo ? ` · walked to ${windowProgress.walkedTo.slice(0, 10)}` : ""}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
+                  {routeSupportsWindows ? (
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Switch
+                        checked={windowedMode}
+                        onCheckedChange={(checked) => setWindowedMode(checked)}
+                        aria-label="Load in date windows"
+                      />
+                      <span>Load in date windows</span>
+                    </label>
+                  ) : null}
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Show</span>
                     <Select
@@ -129,6 +180,7 @@ function ContentExplorerComponent() {
                       totalPages={metrics?.totalPages ?? null}
                       isLoading={isLoading}
                       onPageChange={handlePageChange}
+                      hasNextPage={windowedMode ? windowProgress?.hasMore ?? true : true}
                     />
                   </div>
                 </div>
@@ -266,15 +318,50 @@ function ContentExplorerComponent() {
       ) : null}
 
       {isLoading ? (
-        <div
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-          className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border/30 bg-card/5 py-20"
-        >
-          <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
-          <span className="text-sm font-semibold text-muted-foreground">Loading content items…</span>
-        </div>
+        windowedMode ? (
+          <div
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            className="flex flex-col gap-3 rounded-xl border border-border/30 bg-card/5 p-5"
+          >
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
+              <span className="text-base font-semibold text-foreground">
+                Walking the library in date windows…
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Batch {windowProgress?.batch ?? currentPageNumber} · {windowProgress?.itemsCollected ?? 0} items collected
+            </p>
+            {windowProgress && windowProgress.log.length > 0 ? (
+              <div className="max-h-48 overflow-auto rounded-lg border border-border/20 bg-background/40 p-3">
+                <ul className="space-y-1">
+                  {windowProgress.log.map((event, index) => (
+                    <li key={index} className="text-sm text-muted-foreground">
+                      {formatWalkEvent(event)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <div>
+              <Button variant="outline" className="text-sm" onClick={stopWindowedWalk}>
+                Stop
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border/30 bg-card/5 py-20"
+          >
+            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden="true" />
+            <span className="text-sm font-semibold text-muted-foreground">Loading content items…</span>
+          </div>
+        )
       ) : null}
 
       {requestError ? (
@@ -286,6 +373,29 @@ function ContentExplorerComponent() {
           <div className="space-y-1">
             <h4 className="text-base font-semibold">Fetch request failed</h4>
             <p>{requestError}</p>
+            {windowedMode ? (
+              <div className="pt-2">
+                <Button
+                  variant="outline"
+                  className="text-sm"
+                  onClick={() => void executeCurrentRequest()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : null}
+            {showWindowedResume ? (
+              <div className="space-y-2 pt-2">
+                <p>The site answers narrow date ranges even when the full list times out.</p>
+                <Button
+                  variant="outline"
+                  className="text-sm"
+                  onClick={() => setWindowedMode(true)}
+                >
+                  Load in date windows
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -331,6 +441,7 @@ function ContentExplorerComponent() {
               totalPages={metrics?.totalPages ?? null}
               isLoading={isLoading}
               onPageChange={handlePageChange}
+              hasNextPage={windowedMode ? windowProgress?.hasMore ?? true : true}
             />
           </div>
         </div>

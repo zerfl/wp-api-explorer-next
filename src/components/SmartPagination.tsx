@@ -7,6 +7,7 @@ interface SmartPaginationProps {
   totalPages: number | null;
   isLoading: boolean;
   onPageChange: (page: number) => void;
+  hasNextPage?: boolean;
 }
 
 export function SmartPagination({
@@ -14,6 +15,7 @@ export function SmartPagination({
   totalPages,
   isLoading,
   onPageChange,
+  hasNextPage = true,
 }: SmartPaginationProps) {
   const getPageNumbers = () => {
     if (!totalPages) return [];
@@ -73,7 +75,7 @@ export function SmartPagination({
         <Button
           variant="outline"
           size="icon"
-          disabled={isLoading}
+          disabled={isLoading || !hasNextPage}
           onClick={() => onPageChange(currentPage + 1)}
           className="h-10 w-10"
         >

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Route through the shared wrapper so a hung upstream can't hang the proxy.
-    const result = await httpRequest(decodedUrl, { headers, timeoutMs: 20000 });
+    const result = await httpRequest(decodedUrl, { headers, timeoutMs: 35000 });
 
     // timeout / network / aborted means we never received an upstream response.
     if (!result.ok && result.kind !== "http") {

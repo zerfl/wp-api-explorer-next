@@ -2,7 +2,12 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ExplorerContext, ExplorerContextValue } from "@/contexts/ExplorerContext";
-import { RequestContext, RequestContextValue } from "@/contexts/RequestContext";
+import {
+  RequestContext,
+  RequestContextValue,
+  RequestFailure,
+  WindowProgress,
+} from "@/contexts/RequestContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import {
   buildExplorerUrl,
@@ -25,13 +30,18 @@ import {
   getStoredAutoProxy,
   getStoredConnection,
   getStoredPerPage,
+  isWindowedSite,
   persistAutoProxy,
   persistConnection,
   ResponseMetrics,
+  setWindowedSite,
   SiteConnection,
+  supportsDateWindows,
 } from "@/lib/explorer-client";
 import { httpRequest } from "@/lib/http";
 import { useRequestGuard } from "@/lib/use-request-guard";
+import { useWalkerStore } from "@/lib/use-walker-store";
+import { createWindowedWalker, FetchWindow, formatWpDate, normalizeWpDate } from "@/lib/windowed-walk";
 import { WpRouteInfo, WpSchema, discoverWpApiRoot, parseWpSchema } from "@/lib/wp-schema";
 
 interface ExplorerProviderProps {
@@ -60,11 +70,16 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [responseData, setResponseData] = useState<unknown>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [requestFailure, setRequestFailure] = useState<RequestFailure | null>(null);
+  const [windowedMode, setWindowedModeState] = useState(false);
+  const [windowProgress, setWindowProgress] = useState<WindowProgress | null>(null);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
   const [corsRetryAvailable, setCorsRetryAvailable] = useState(false);
   const [autoProxy, setAutoProxyState] = useState(false);
   const [metrics, setMetrics] = useState<ResponseMetrics | null>(null);
+
+  const walkerStore = useWalkerStore();
 
   const [hydratedBookmarkSearch, setHydratedBookmarkSearch] = useState<string | null>(null);
   const [internalNavigationSearch, setInternalNavigationSearch] = useState<string | null>(null);
@@ -162,6 +177,7 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
     setResponseData(null);
     setMetrics(null);
     setRequestError(null);
+    setRequestFailure(null);
   }, []);
 
   const persistPerPagePreference = useCallback((value: string) => {
@@ -187,7 +203,12 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
   );
 
   const fetchJson = useCallback(
-    (conn: SiteConnection, targetUrl: string, signal?: AbortSignal) => {
+    (
+      conn: SiteConnection,
+      targetUrl: string,
+      signal?: AbortSignal,
+      options?: { timeoutMs?: number }
+    ) => {
       const headers = new Headers();
       if (conn.auth) {
         const basicHash = btoa(`${conn.auth.username}:${conn.auth.appPassword}`);
@@ -197,7 +218,7 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
       const fetchUrl = conn.useProxy
         ? `/api/proxy?url=${encodeURIComponent(targetUrl)}`
         : targetUrl;
-      return httpRequest(fetchUrl, { headers, signal });
+      return httpRequest(fetchUrl, { headers, signal, timeoutMs: options?.timeoutMs });
     },
     []
   );
@@ -206,13 +227,211 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
   // responses so a slow earlier fetch can never overwrite newer state.
   const requestGuard = useRequestGuard();
 
+  const executeWindowedRequest = useCallback(
+    async (
+      conn: SiteConnection,
+      route: WpRouteInfo,
+      params: Record<string, string>,
+      signal: AbortSignal,
+      isCurrent: () => boolean
+    ) => {
+      const startBound = params.after ? normalizeWpDate(params.after) : "2000-01-01T00:00:00";
+      if (params.after && !startBound) {
+        setRequestError("after/before must be YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS");
+        setResponseData(null);
+        setIsLoading(false);
+        return;
+      }
+
+      let endBound: string;
+      if (params.before) {
+        const normalized = normalizeWpDate(params.before);
+        if (!normalized) {
+          setRequestError("after/before must be YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS");
+          setResponseData(null);
+          setIsLoading(false);
+          return;
+        }
+        endBound = normalized;
+      } else {
+        const tomorrow = new Date();
+        tomorrow.setHours(0, 0, 0, 0);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        endBound = formatWpDate(tomorrow);
+      }
+
+      const perPage = Number(params.per_page) || 100;
+      const batch = Number(params.page) || 1;
+
+      const paramsNoPage = Object.fromEntries(
+        Object.entries(params).filter(([key]) => key !== "page")
+      );
+      const signature = JSON.stringify({
+        apiRoot: conn.apiRoot,
+        routePath: route.path,
+        params: paramsNoPage,
+      });
+
+      const fetchWindow: FetchWindow = async (request, windowSignal) => {
+        const path = route.path === "/" ? "" : route.path;
+        const baseUrl = conn.apiRoot.replace(/\/+$/, "") + path;
+        const url = new URL(baseUrl);
+        Object.entries(params).forEach(([key, value]) => {
+          if (value) {
+            url.searchParams.set(key, value);
+          }
+        });
+        url.searchParams.set("after", request.after);
+        url.searchParams.set("before", request.before);
+        url.searchParams.set("page", String(request.page));
+        url.searchParams.set("per_page", String(request.perPage));
+        url.searchParams.set("orderby", "id");
+        url.searchParams.set("order", "asc");
+
+        const result = await fetchJson(conn, url.toString(), windowSignal, { timeoutMs: 35000 });
+        if (result.ok) {
+          walkerStore.recordResponse(result.status, result.statusText);
+        }
+        return result;
+      };
+
+      const { walker, fresh: freshWalker } = walkerStore.lease(signature, () =>
+        createWindowedWalker<{ id: number }>(
+          fetchWindow,
+          { perPage, start: startBound as string, end: endBound },
+          (event) => walkerStore.emit(event)
+        )
+      );
+
+      const captured: { unavailable: { after: string; before: string } | null } = {
+        unavailable: null,
+      };
+
+      walkerStore.setEventSink((event) => {
+        if (event.type === "unavailable") {
+          captured.unavailable = { after: event.after, before: event.before };
+        }
+        if (!isCurrent()) {
+          return;
+        }
+        setWindowProgress((prev) => {
+          const log = [event, ...(prev?.log ?? [])].slice(0, 50);
+          return {
+            active: true,
+            batch,
+            itemsCollected: walker.items.length,
+            walkedTo: prev?.walkedTo ?? null,
+            done: walker.done,
+            hasMore: true,
+            log,
+          };
+        });
+      });
+
+      setWindowProgress((prev) => ({
+        active: true,
+        batch,
+        itemsCollected: walker.items.length,
+        walkedTo: null,
+        done: walker.done,
+        hasMore: true,
+        log: freshWalker ? [] : prev?.log ?? [],
+      }));
+
+      const startTime = performance.now();
+      const outcome = await walker.collect(batch * perPage, signal);
+      const durationMs = Math.round(performance.now() - startTime);
+
+      if (!isCurrent()) {
+        return;
+      }
+
+      const data = walker.items.slice((batch - 1) * perPage, batch * perPage);
+      const hasMore =
+        outcome.status === "ok"
+          ? !walker.done || walker.items.length > batch * perPage
+          : outcome.status === "aborted"
+            ? !walker.done
+            : false;
+
+      setWindowProgress((prev) => ({
+        active: false,
+        batch,
+        itemsCollected: walker.items.length,
+        walkedTo: walker.cursor,
+        done: walker.done,
+        hasMore,
+        log: prev?.log ?? [],
+      }));
+
+      const commitMetrics = () => {
+        const last = walkerStore.lastResponse();
+        setMetrics({
+          status: last?.status ?? null,
+          statusText: last?.statusText ?? "",
+          timeMs: durationMs,
+          totalRecords: null,
+          totalPages: null,
+        });
+      };
+
+      if (outcome.status === "unavailable") {
+        const lastWindow = captured.unavailable;
+        setRequestError(
+          lastWindow
+            ? `Gave up: the site did not answer a 1-day window (${lastWindow.after.slice(0, 10)} → ${lastWindow.before.slice(0, 10)}).`
+            : "The site did not answer even a one-day window. It may be down or blocking collection queries."
+        );
+        setResponseData(null);
+        setIsLoading(false);
+        return;
+      }
+
+      if (outcome.status === "error") {
+        const failure = outcome.failure;
+        const message =
+          failure.kind === "http"
+            ? extractWpErrorMessage(failure.body) ?? failure.message
+            : failure.message;
+        setRequestError(message);
+        setRequestFailure({ kind: failure.kind, status: failure.status });
+        setResponseData(null);
+        setIsLoading(false);
+        return;
+      }
+
+      if (outcome.status === "aborted") {
+        if (data.length === 0) {
+          setRequestError("Stopped before any items were collected.");
+          setResponseData(null);
+        } else {
+          setResponseData(data);
+          commitMetrics();
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      setResponseData(data);
+      commitMetrics();
+      setIsLoading(false);
+    },
+    [fetchJson, walkerStore]
+  );
+
   const executeApiRequest = useCallback(
     async (conn: SiteConnection, route: WpRouteInfo, params: Record<string, string>) => {
       const { signal, isCurrent } = requestGuard.begin();
 
       setIsLoading(true);
       setRequestError(null);
+      setRequestFailure(null);
       setMetrics(null);
+
+      if (walkerStore.isWindowed() && supportsDateWindows(route)) {
+        await executeWindowedRequest(conn, route, params, signal, isCurrent);
+        return;
+      }
 
       const startTime = performance.now();
       const path = route.path === "/" ? "" : route.path;
@@ -249,6 +468,10 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
         }
 
         setRequestError(message);
+        setRequestFailure({
+          kind: result.kind,
+          status: result.kind === "http" ? result.status : null,
+        });
         setResponseData(null);
         setIsLoading(false);
         return;
@@ -277,7 +500,7 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
       setResponseData(json);
       setIsLoading(false);
     },
-    [fetchJson, requestGuard]
+    [executeWindowedRequest, fetchJson, requestGuard, walkerStore]
   );
 
   const fetchTypeCollections = useCallback(
@@ -419,6 +642,12 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
               per_page: perPagePreference,
             };
 
+        const windowed = isWindowedSite(canonicalSiteUrl);
+        walkerStore.setWindowed(windowed);
+        walkerStore.reset();
+        setWindowedModeState(windowed);
+        setWindowProgress(null);
+
         setConnection(nextConnection);
         setRoutes(parsedRoutes);
         setCollections(nextCollections);
@@ -448,7 +677,15 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
         setIsConnecting(false);
       }
     },
-    [autoProxy, clearRequestState, executeApiRequest, fetchTypeCollections, perPagePreference, syncBookmarkUrl]
+    [
+      autoProxy,
+      clearRequestState,
+      executeApiRequest,
+      fetchTypeCollections,
+      perPagePreference,
+      syncBookmarkUrl,
+      walkerStore,
+    ]
   );
 
   const retryWithProxy = useCallback(() => {
@@ -625,6 +862,34 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
     [connection, executeApiRequest, queryParams, selectedRoute]
   );
 
+  const setWindowedMode = useCallback(
+    (enabled: boolean) => {
+      walkerStore.setWindowed(enabled);
+      walkerStore.reset();
+      setWindowedModeState(enabled);
+      setWindowProgress(null);
+
+      if (!connection) {
+        return;
+      }
+
+      setWindowedSite(connection.siteUrl, enabled);
+
+      const nextParams = { ...queryParams, page: "1" };
+      setQueryParamsState(nextParams);
+      syncCurrentBookmark("1", "push");
+
+      if (selectedRoute) {
+        void executeApiRequest(connection, selectedRoute, nextParams);
+      }
+    },
+    [connection, executeApiRequest, queryParams, selectedRoute, syncCurrentBookmark, walkerStore]
+  );
+
+  const stopWindowedWalk = useCallback(() => {
+    requestGuard.abortCurrent();
+  }, [requestGuard]);
+
   const changePerPage = useCallback(
     async (value: string | null) => {
       if (!selectedRoute || !connection || !value) {
@@ -659,6 +924,10 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
     setCollections([]);
     setSelectedRoute(null);
     clearRequestState();
+    walkerStore.setWindowed(false);
+    walkerStore.reset();
+    setWindowedModeState(false);
+    setWindowProgress(null);
     setIsLoading(false);
     setConnectionError(null);
     setConnectionNotice(null);
@@ -671,7 +940,7 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
       window.history.replaceState({}, "", "/");
       setSearch("");
     }
-  }, [clearRequestState, search]);
+  }, [clearRequestState, search, walkerStore]);
 
   const getRouteLabel = useCallback(
     (route: WpRouteInfo) => {
@@ -756,13 +1025,18 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
         isLoading,
         responseData,
         requestError,
+        requestFailure,
         metrics,
+        windowedMode,
+        windowProgress,
       },
       actions: {
         setQueryParams,
         executeCurrentRequest,
         resetForRoute,
         changePerPage,
+        setWindowedMode,
+        stopWindowedWalk,
       },
       meta: {
         constructedUrl,
@@ -776,9 +1050,14 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
       metrics,
       queryParams,
       requestError,
+      requestFailure,
       resetForRoute,
       responseData,
       setQueryParams,
+      setWindowedMode,
+      stopWindowedWalk,
+      windowProgress,
+      windowedMode,
     ]
   );
 

@@ -57,3 +57,22 @@ WordPress returns IDs for relational fields like authors (`author`), featured im
 - **Media:** Can filter by `parent` ID, `media_type` (e.g. `image`), and `mime_type` (e.g. `image/jpeg`).
 - **Comments:** Can filter by `post` ID, `author_email`, `status`.
 - **Users:** Can filter by `roles`.
+
+## 5. Slow collections: date-window walking
+On some large sites any unbounded collection request (`per_page`, `_fields`, `orderby`, `search`, with no date bound) never returns: the host answers HTTP 504 after ~30 s, or hangs with no headers. The index, single items by id, and `?include=` lists still answer in ~2 s. The same query restricted with `after`/`before` answers in 2–4 s when the window matches few rows, and 504s when the window is dense. So the explorer lists these collections by walking the date axis in windows instead of paging the whole set.
+
+Verified constraints (against a real site):
+- `after`/`before` reject a bare date with 400 `rest_invalid_param`; they need a full ISO 8601 timestamp such as `2025-06-01T00:00:00`.
+- Both are exclusive at second precision, and a zone-less timestamp is read in the site's own timezone.
+- `X-WP-Total` on a windowed response counts only that window, not the library.
+
+Walker (`src/lib/windowed-walk.ts`):
+- Windows start at 1 year, grow to an 8-year ceiling, and never go below a 1-day floor.
+- A window that times out or returns HTTP ≥ 500 is halved and retried, and the ceiling drops to the halved span so it cannot grow back past the size the site refused. Once the probe has succeeded, a network-level failure counts as a timeout too: in direct mode a host's 503/504 gateway page carries no CORS headers, so the browser fetch rejects and surfaces as a network error rather than an HTTP 5xx.
+- An empty window doubles the next span (up to the ceiling) to skip sparse stretches quickly.
+- The cursor advances to `before − 1 s` (the boundary second overlaps by design), and items are deduped by `id`.
+- Windows are requested with `orderby=id&order=asc` and paged until the array is short or `x-wp-totalpages` is reached; a 400 `rest_post_invalid_page_number` ends the window.
+- The first call probes a single 1-day window ending at the end bound; if that fails with a timeout or 5xx the site is treated as unavailable for collection queries.
+- The walker and proxy use a 35 s timeout so a 30 s upstream 504 arrives as an HTTP failure rather than a proxy 502.
+
+Mode is per site: a toggle appears whenever the route's first endpoint accepts both `after` and `before`, and the choice is remembered in sessionStorage.

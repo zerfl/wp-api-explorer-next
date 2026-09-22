@@ -16,6 +16,11 @@ export interface RequestGuard {
    * earlier response can never clobber a newer one.
    */
   begin: () => RequestTicket;
+  /**
+   * Abort the in-flight request without starting a new one, leaving the current
+   * ticket current. Lets a user stop work while still keeping its partial result.
+   */
+  abortCurrent: () => void;
 }
 
 /**
@@ -40,6 +45,10 @@ export function useRequestGuard(): RequestGuard {
     };
   }, []);
 
+  const abortCurrent = useCallback(() => {
+    controllerRef.current?.abort();
+  }, []);
+
   // Stable reference so consumers can safely list the guard in dependency arrays.
-  return useMemo(() => ({ begin }), [begin]);
+  return useMemo(() => ({ begin, abortCurrent }), [abortCurrent, begin]);
 }

@@ -5,6 +5,7 @@ import {
   CONNECTION_STORAGE_KEY,
   DEFAULT_PER_PAGE,
   PER_PAGE_STORAGE_KEY,
+  WINDOWED_SITES_STORAGE_KEY,
 } from "@/lib/explorer";
 import { WpRouteInfo, WpSchema } from "@/lib/wp-schema";
 
@@ -114,6 +115,50 @@ export const persistConnection = (connection: StoredConnectionSnapshot | null) =
 };
 
 export const getRouteArgs = (route: WpRouteInfo | null) => route?.endpoints?.[0]?.args || {};
+
+export const supportsDateWindows = (route: WpRouteInfo | null): boolean => {
+  const args = getRouteArgs(route);
+  return "after" in args && "before" in args;
+};
+
+export const getWindowedSites = (): string[] => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(WINDOWED_SITES_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
+};
+
+export const isWindowedSite = (siteUrl: string): boolean => getWindowedSites().includes(siteUrl);
+
+export const setWindowedSite = (siteUrl: string, enabled: boolean): string[] => {
+  const current = new Set(getWindowedSites());
+  if (enabled) {
+    current.add(siteUrl);
+  } else {
+    current.delete(siteUrl);
+  }
+
+  const next = [...current];
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem(WINDOWED_SITES_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // sessionStorage unavailable (private mode / blocked) — the toggle stays in memory only.
+    }
+  }
+
+  return next;
+};
 
 export const buildBaseQueryParams = (
   route: WpRouteInfo,
