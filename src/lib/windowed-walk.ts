@@ -105,6 +105,9 @@ function isSlowSignal(failure: HttpFailure): boolean {
   );
 }
 
+/** Without X-WP-TotalPages, this many empty pages in a row end a window. */
+export const MAX_EMPTY_PAGES_WITHOUT_TOTAL = 50;
+
 /** True for WordPress's 400 `rest_post_invalid_page_number` (page past the end). */
 export function isInvalidPageNumber(body: string | null): boolean {
   if (!body) {
@@ -143,6 +146,7 @@ export function createWindowedWalker<T extends { id: number }>(
   let page = 1;
   let pagesFetched = 0;
   let windowItemCount = 0;
+  let emptyPagesInARow = 0;
 
   const emit = (event: WalkEvent) => {
     if (onEvent) {
@@ -169,6 +173,7 @@ export function createWindowedWalker<T extends { id: number }>(
     page = 1;
     pagesFetched = 0;
     windowItemCount = 0;
+    emptyPagesInARow = 0;
 
     if (nextAfterMs >= endMs || beforeMs >= endMs) {
       done = true;
@@ -239,8 +244,12 @@ export function createWindowedWalker<T extends { id: number }>(
 
         const totalPagesHeader = result.headers.get("x-wp-totalpages");
         const totalPages = totalPagesHeader ? Number.parseInt(totalPagesHeader, 10) : null;
-        // A short page isn't the end: WordPress drops unreadable items after the query.
-        const finished = batch.length === 0 || (totalPages !== null ? page >= totalPages : false);
+        // Short or empty pages aren't the end: WordPress drops unreadable items
+        // after the query. Without the header, the past-the-end 400 ends the window;
+        // the empty-run cap only stops servers that never send that 400.
+        emptyPagesInARow = batch.length === 0 ? emptyPagesInARow + 1 : 0;
+        const finished =
+          totalPages !== null ? page >= totalPages : emptyPagesInARow >= MAX_EMPTY_PAGES_WITHOUT_TOTAL;
 
         if (finished) {
           finishWindow(afterMs, beforeMs, before);
@@ -277,6 +286,7 @@ export function createWindowedWalker<T extends { id: number }>(
         page = 1;
         pagesFetched = 0;
         windowItemCount = 0;
+        emptyPagesInARow = 0;
         continue;
       }
 

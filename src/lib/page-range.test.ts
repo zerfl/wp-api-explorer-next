@@ -113,23 +113,24 @@ describe("runPageRange", () => {
     expect(run.commits).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  it("keeps going past short pages", async () => {
+  it("keeps going past short and empty pages", async () => {
     const fetcher = controlledFetcher();
     const run = start(fetcher, 1, 3);
 
     await fetcher.resolve(1, itemsFor(1, 1));
-    await fetcher.resolve(2, itemsFor(2));
-    await fetcher.resolve(3, itemsFor(3, 1));
+    await fetcher.resolve(2, itemsFor(2, 0));
+    await fetcher.resolve(3, itemsFor(3));
 
     await expect(run.outcome).resolves.toEqual({ status: "done", committedThrough: 3 });
+    expect(run.commits).toEqual([1, 2, 3]);
   });
 
-  it("ends at an empty page and cancels pages fetched beyond it", async () => {
+  it("ends at a past-the-end page and cancels pages fetched beyond it", async () => {
     const fetcher = controlledFetcher();
     const run = start(fetcher, 1, 10);
 
     await fetcher.resolve(3, itemsFor(3));
-    await fetcher.resolve(2, itemsFor(2, 0));
+    await fetcher.resolve(2, { kind: "end" });
     await fetcher.resolve(1, itemsFor(1));
 
     // Page 4 started when page 3 finished; finding the end cancels it.

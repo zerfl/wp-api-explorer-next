@@ -3,13 +3,15 @@ import type { HttpResult } from "@/lib/http";
 import {
   createWindowedWalker,
   formatWpDate,
+  MAX_EMPTY_PAGES_WITHOUT_TOTAL,
   normalizeWpDate,
   WindowRequest,
 } from "@/lib/windowed-walk";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function ok(items: Array<{ id: number }>, headers: Record<string, string> = {}): HttpResult {
+// WordPress always sends X-WP-TotalPages; tests about a missing header pass {}.
+function ok(items: Array<{ id: number }>, headers: Record<string, string> = { "x-wp-totalpages": "1" }): HttpResult {
   return {
     ok: true,
     status: 200,
@@ -246,11 +248,13 @@ describe("createWindowedWalker", () => {
     expect(walker.items.map((item) => item.id)).toEqual([1, 2, 3]);
   });
 
-  it("without x-wp-totalpages, pages a window until an empty page", async () => {
+  it("without x-wp-totalpages, pages a window past empty pages until the past-the-end 400", async () => {
     const { requests, fetchWindow } = recorder((_req, index) => {
       if (index === 0) return ok([]); // probe
-      if (index === 1) return ok([{ id: 1 }]);
-      return ok([]);
+      if (index === 1) return ok([{ id: 1 }], {});
+      if (index === 2) return ok([], {});
+      if (index === 3) return ok([{ id: 2 }], {});
+      return http(400, JSON.stringify({ code: "rest_post_invalid_page_number" }));
     });
 
     const walker = createWindowedWalker<{ id: number }>(fetchWindow, {
@@ -264,7 +268,30 @@ describe("createWindowedWalker", () => {
 
     await walker.collect(10);
 
-    expect(requests.slice(1).map((req) => req.page)).toEqual([1, 2]);
+    expect(requests.slice(1).map((req) => req.page)).toEqual([1, 2, 3, 4]);
+    expect(walker.items.map((item) => item.id)).toEqual([1, 2]);
+    expect(walker.done).toBe(true);
+  });
+
+  it("without x-wp-totalpages or a 400, gives up on a window after a run of empty pages", async () => {
+    const { requests, fetchWindow } = recorder((_req, index) => {
+      if (index === 0) return ok([]); // probe
+      if (index === 1) return ok([{ id: 1 }], {});
+      return ok([], {});
+    });
+
+    const walker = createWindowedWalker<{ id: number }>(fetchWindow, {
+      perPage: 2,
+      start: "2020-01-01T00:00:00",
+      end: "2020-02-01T00:00:00",
+      initialWindowMs: 400 * DAY_MS,
+      ceilingMs: 400 * DAY_MS,
+      minWindowMs: DAY_MS,
+    });
+
+    await walker.collect(10);
+
+    expect(requests.length - 2).toBe(MAX_EMPTY_PAGES_WITHOUT_TOTAL);
     expect(walker.done).toBe(true);
   });
 
@@ -295,8 +322,8 @@ describe("createWindowedWalker", () => {
     const invalidPageBody = JSON.stringify({ code: "rest_post_invalid_page_number" });
     const { requests, fetchWindow } = recorder((_req, index) => {
       if (index === 0) return ok([]); // probe
-      if (index === 1) return ok([{ id: 1 }, { id: 2 }]);
-      if (index === 2) return ok([{ id: 3 }, { id: 4 }]);
+      if (index === 1) return ok([{ id: 1 }, { id: 2 }], {});
+      if (index === 2) return ok([{ id: 3 }, { id: 4 }], {});
       return http(400, invalidPageBody);
     });
 
@@ -337,7 +364,7 @@ describe("createWindowedWalker", () => {
     const { requests, fetchWindow } = recorder((_req, index) => {
       if (index === 0) return ok([]); // probe
       const items = Array.from({ length: 50 }, () => ({ id: nextId++ }));
-      return ok(items); // 50 < perPage 100 → window finishes each call
+      return ok(items); // one page per window
     });
 
     const walker = createWindowedWalker<{ id: number }>(fetchWindow, {

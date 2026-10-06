@@ -42,7 +42,7 @@ export async function runPageRange<T>(options: PageRangeOptions<T>): Promise<Pag
   const buffer = new Map<number, PageCommit<T>>();
   let nextPage = from;
   let committedThrough = from - 1;
-  // Last page that exists, once an empty page or past-the-end error reveals it.
+  // Last page that exists, once a past-the-end error reveals it.
   let lastPage = Number.POSITIVE_INFINITY;
   type Failed = { page: number; failure: HttpFailure };
   let failed: Failed | null = null;
@@ -96,9 +96,9 @@ export async function runPageRange<T>(options: PageRangeOptions<T>): Promise<Pag
         continue;
       }
 
-      // Not a short page: WordPress drops unreadable items after the query, so
-      // pages in the middle of a collection can come back short.
-      if (result.kind === "end" || result.items.length === 0) {
+      // Neither a short nor an empty page is the end: WordPress drops unreadable
+      // items after the query, so any page mid-collection can come back short or empty.
+      if (result.kind === "end") {
         endAt(page - 1);
       } else {
         buffer.set(page, { page, ...result });
