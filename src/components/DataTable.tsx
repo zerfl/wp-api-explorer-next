@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { memo, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -18,16 +18,84 @@ interface DataTableProps {
   data: unknown;
 }
 
-export default function DataTable({ data }: DataTableProps) {
+const formatCell = (val: unknown) => {
+  if (val === null || val === undefined) {
+    return <span className="text-muted-foreground/70 italic">-</span>;
+  }
+  if (typeof val === "boolean") {
+    return (
+      <Badge variant="outline" className={`text-xs ${val ? "text-success border-success/30" : "text-muted-foreground"}`}>
+        {String(val)}
+      </Badge>
+    );
+  }
+  if (typeof val === "object") {
+    if (val !== null && "rendered" in val) {
+      const renderedVal = (val as { rendered?: unknown }).rendered;
+      if (typeof renderedVal === "string") {
+        return (
+          <span 
+            className="truncate max-w-[250px] block text-sm" 
+            title={renderedVal}
+            dangerouslySetInnerHTML={{ __html: renderedVal }}
+          />
+        );
+      }
+    }
+    return (
+      <span className="text-muted-foreground/70 font-mono text-xs truncate max-w-[200px] block" title={JSON.stringify(val)}>
+        {JSON.stringify(val)}
+      </span>
+    );
+  }
+  
+  const strVal = String(val);
+  
+  if (strVal.startsWith("http://") || strVal.startsWith("https://")) {
+    return (
+      <a 
+        href={strVal} 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className="text-primary hover:underline truncate max-w-[200px] block font-mono text-xs"
+        title={strVal}
+      >
+        {strVal}
+      </a>
+    );
+  }
+
+  return (
+    <span className="truncate max-w-[250px] block font-medium text-sm" title={strVal}>
+      {strVal}
+    </span>
+  );
+};
+
+// Memoized so appended pages render only their new rows.
+const DataRow = memo(function DataRow({ row, columns }: { row: Record<string, unknown>; columns: string[] }) {
+  return (
+    <TableRow className="border-b border-border/20 hover:bg-card/10 transition-colors">
+      {columns.map((col) => (
+        <TableCell key={col} className="py-3 px-4 max-w-[300px] truncate whitespace-nowrap text-sm">
+          {formatCell(row[col])}
+        </TableCell>
+      ))}
+    </TableRow>
+  );
+});
+
+function DataTable({ data }: DataTableProps) {
   // Normalize items to an array of objects
   const items = useMemo(() => {
     const raw = Array.isArray(data) ? data : data ? [data] : [];
     return raw.filter((item): item is Record<string, unknown> => item !== null && typeof item === "object");
   }, [data]);
 
-  // Extract all unique keys from data items
-  const columns = useMemo(() => {
-    if (items.length === 0) return [];
+  // Extract all unique keys from data items. Joined into a key so appending
+  // items keeps the same columns array and memoized rows don't re-render.
+  const columnKey = useMemo(() => {
+    if (items.length === 0) return "";
     
     // Scan up to 5 items to gather keys in case some fields are optional
     const allKeys = new Set<string>();
@@ -52,8 +120,9 @@ export default function DataTable({ data }: DataTableProps) {
       if (idxB !== -1) return 1;
       
       return a.localeCompare(b);
-    });
+    }).join("\n");
   }, [items]);
+  const columns = useMemo(() => (columnKey ? columnKey.split("\n") : []), [columnKey]);
 
   if (items.length === 0) {
     return (
@@ -67,59 +136,6 @@ export default function DataTable({ data }: DataTableProps) {
     );
   }
 
-  const formatCell = (val: unknown) => {
-    if (val === null || val === undefined) {
-      return <span className="text-muted-foreground/70 italic">-</span>;
-    }
-    if (typeof val === "boolean") {
-      return (
-        <Badge variant="outline" className={`text-xs ${val ? "text-success border-success/30" : "text-muted-foreground"}`}>
-          {String(val)}
-        </Badge>
-      );
-    }
-    if (typeof val === "object") {
-      if (val !== null && "rendered" in val) {
-        const renderedVal = (val as { rendered?: unknown }).rendered;
-        if (typeof renderedVal === "string") {
-          return (
-            <span 
-              className="truncate max-w-[250px] block text-sm" 
-              title={renderedVal}
-              dangerouslySetInnerHTML={{ __html: renderedVal }}
-            />
-          );
-        }
-      }
-      return (
-        <span className="text-muted-foreground/70 font-mono text-xs truncate max-w-[200px] block" title={JSON.stringify(val)}>
-          {JSON.stringify(val)}
-        </span>
-      );
-    }
-    
-    const strVal = String(val);
-    
-    if (strVal.startsWith("http://") || strVal.startsWith("https://")) {
-      return (
-        <a 
-          href={strVal} 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="text-primary hover:underline truncate max-w-[200px] block font-mono text-xs"
-          title={strVal}
-        >
-          {strVal}
-        </a>
-      );
-    }
-
-    return (
-      <span className="truncate max-w-[250px] block font-medium text-sm" title={strVal}>
-        {strVal}
-      </span>
-    );
-  };
 
   return (
     <div className="border border-border/40 rounded-lg bg-background/40 backdrop-blur-md overflow-hidden shadow-sm">
@@ -144,13 +160,7 @@ export default function DataTable({ data }: DataTableProps) {
             </TableHeader>
             <TableBody>
               {items.map((row, idx) => (
-                <TableRow key={idx} className="border-b border-border/20 hover:bg-card/10 transition-colors">
-                  {columns.map((col) => (
-                    <TableCell key={col} className="py-3 px-4 max-w-[300px] truncate whitespace-nowrap text-sm">
-                      {formatCell(row[col])}
-                    </TableCell>
-                  ))}
-                </TableRow>
+                <DataRow key={idx} row={row} columns={columns} />
               ))}
             </TableBody>
           </Table>
@@ -163,3 +173,5 @@ export default function DataTable({ data }: DataTableProps) {
     </div>
   );
 }
+
+export default memo(DataTable);

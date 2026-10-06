@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { memo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Copy, Check, Download, ChevronRight, ChevronDown, Search, FolderClosed, FolderOpen } from "lucide-react";
@@ -11,7 +11,7 @@ interface JsonViewerProps {
   initialExpandDepth?: number;
 }
 
-export default function JsonViewer({ data, initialExpandDepth = 2 }: JsonViewerProps) {
+function JsonViewer({ data, initialExpandDepth = 2 }: JsonViewerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [copied, setCopied] = useState(false);
   const [globalExpanded, setGlobalExpanded] = useState<boolean | null>(null);
@@ -268,3 +268,5 @@ function JsonNode({
     </div>
   );
 }
+
+export default memo(JsonViewer);

@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useMemo, useRef, useState } from "react";
 import { PAGE_RANGE_CONCURRENCY } from "@/lib/explorer";
 import {
   buildCollectionUrl,
@@ -149,7 +149,11 @@ export function usePageRangeLoad({
         if (pending.length) {
           const appended = pending;
           pending = [];
-          setResponseData((prev: unknown) => (Array.isArray(prev) ? [...prev, ...appended] : appended));
+          // A transition lets React render hundreds of new cards in slices
+          // instead of blocking input for the whole render.
+          startTransition(() => {
+            setResponseData((prev: unknown) => (Array.isArray(prev) ? [...prev, ...appended] : appended));
+          });
         }
         if (totals) {
           const latest = totals;

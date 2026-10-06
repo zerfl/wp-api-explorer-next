@@ -16,7 +16,7 @@ import {
   Music4,
   User,
 } from "lucide-react";
-import { CSSProperties, useMemo, useState } from "react";
+import { CSSProperties, memo, useCallback, useMemo, useState } from "react";
 
 interface WpPostEntity {
   id: number;
@@ -89,14 +89,433 @@ interface VisualReaderProps {
   data: unknown;
   routePath: string;
 }
+const cleanHtml = (html: string) => {
+  if (!html) return "";
+  return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+};
 
-export default function VisualReader({ data, routePath }: VisualReaderProps) {
+const formatDate = (dateStr: string) => {
+  try {
+    return new Date(dateStr).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
+};
+
+// Cards are memoized so appending pages renders only the new items.
+const PostCard = memo(function PostCard({ post }: { post: WpPostEntity }) {
+  const author = post._embedded?.author?.[0];
+  const featuredMedia = post._embedded?.["wp:featuredmedia"]?.[0];
+  const terms = post._embedded?.["wp:term"] || [];
+  const title = post.title?.rendered || `Entry #${post.id}`;
+  const excerpt = post.excerpt?.rendered || "";
+  const featuredImgUrl =
+    featuredMedia?.media_details?.sizes?.medium?.source_url ||
+    featuredMedia?.source_url ||
+    featuredMedia?.media_details?.sizes?.full?.source_url;
+  const categories = terms.flatMap((taxList) =>
+    taxList.filter((term) => term.taxonomy === "category")
+  );
+
+  return (
+    <Card
+      className="group flex flex-col overflow-hidden border-border/60 bg-card/30 shadow-md transition-all duration-300 [contain-intrinsic-size:auto_460px] [content-visibility:auto] hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg"
+    >
+      {featuredImgUrl ? (
+        <div className="relative aspect-video w-full overflow-hidden bg-muted">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            loading="lazy"
+            decoding="async"
+            src={featuredImgUrl}
+            alt={featuredMedia?.alt_text || "Featured media"}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+          />
+          {categories.length > 0 ? (
+            <div className="absolute left-3 top-3 flex max-w-[90%] flex-wrap gap-1.5">
+              {categories.slice(0, 2).map((category) => (
+                <Badge
+                  key={category.id}
+                  className="bg-primary/95 px-2 py-0.5 text-xs font-semibold text-primary-foreground"
+                >
+                  {category.name}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="relative flex h-24 w-full items-center justify-center border-b border-border/20 bg-gradient-to-r from-primary/10 to-accent/10">
+          <FileText className="h-7 w-7 text-muted-foreground/30" />
+          {categories.length > 0 ? (
+            <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+              {categories.slice(0, 2).map((category) => (
+                <Badge
+                  key={category.id}
+                  className="bg-primary/95 px-2 py-0.5 text-xs font-semibold text-primary-foreground"
+                >
+                  {category.name}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <CardHeader className="space-y-2 p-5 pb-2.5">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{formatDate(post.date)}</span>
+          {post.status ? (
+            <Badge
+              variant="outline"
+              className={`ml-auto py-0.5 text-xs font-semibold uppercase ${
+                post.status === "publish"
+                  ? "border-success/30 bg-success/5 text-success"
+                  : "border-warning/30 text-warning"
+              }`}
+            >
+              {post.status}
+            </Badge>
+          ) : null}
+        </div>
+
+        {post.link ? (
+          <a
+            href={post.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block text-base font-semibold leading-snug text-foreground transition-colors hover:text-primary"
+            dangerouslySetInnerHTML={{ __html: cleanHtml(title) }}
+          />
+        ) : (
+          <h4
+            className="text-base font-semibold leading-snug text-foreground"
+            dangerouslySetInnerHTML={{ __html: cleanHtml(title) }}
+          />
+        )}
+      </CardHeader>
+
+      <CardContent className="flex-1 p-5 pt-0">
+        {excerpt ? (
+          <div
+            className="line-clamp-3 text-sm leading-relaxed text-muted-foreground"
+            dangerouslySetInnerHTML={{ __html: cleanHtml(excerpt) }}
+          />
+        ) : (
+          <p className="text-sm italic text-muted-foreground/70">
+            No description excerpt available.
+          </p>
+        )}
+      </CardContent>
+
+      <CardFooter className="mt-3 flex items-center justify-between border-t border-border/20 bg-card/10 p-5 pt-0">
+        <div className="mt-3.5 flex items-center gap-2">
+          {author?.avatar_urls?.["24"] || author?.avatar_urls?.["48"] ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              loading="lazy"
+              decoding="async"
+              src={author.avatar_urls["48"] || author.avatar_urls["24"]}
+              alt={author.name}
+              className="h-6 w-6 rounded-full border border-border/60 object-cover"
+            />
+          ) : (
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+              <User className="h-3.5 w-3.5 text-primary" />
+            </div>
+          )}
+          <span className="text-xs font-semibold text-foreground/80">
+            {author?.name || "Author"}
+          </span>
+        </div>
+
+        {post.link ? (
+          <div className="mt-3.5 flex items-center gap-1.5">
+            <a
+              href={post.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-primary"
+              aria-label="View original post (opens in a new tab)"
+            >
+              <LinkIcon className="h-4 w-4" aria-hidden="true" />
+            </a>
+          </div>
+        ) : null}
+      </CardFooter>
+    </Card>
+  );
+});
+
+const MediaCard = memo(function MediaCard({
+  media,
+  copied,
+  onCopy,
+}: {
+  media: WpMediaEntity;
+  copied: boolean;
+  onCopy: (url: string) => void;
+}) {
+  const mime = media.mime_type || "";
+  const mediaKind = getMediaKind(media);
+  const srcUrl = media.source_url || media.guid?.rendered || "";
+  const previewUrl =
+    media.media_details?.sizes?.medium?.source_url ||
+    media.media_details?.sizes?.thumbnail?.source_url ||
+    srcUrl;
+  const title = media.title?.rendered || `Media #${media.id}`;
+  const aspectRatio = getAspectRatioStyle(media);
+
+  return (
+    <Card
+      className="group flex flex-col overflow-hidden border-border/60 bg-card/30 shadow-md transition-all [contain-intrinsic-size:auto_480px] [content-visibility:auto] hover:border-primary/40 hover:shadow-lg"
+    >
+      <a
+        href={srcUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="relative block border-b border-border/20 bg-background/50 text-left"
+      >
+        <div
+          className="flex w-full items-center justify-center overflow-hidden bg-slate-950/30"
+          style={aspectRatio}
+        >
+          {mediaKind === "image" && previewUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              loading="lazy"
+              decoding="async"
+              src={previewUrl}
+              alt={media.alt_text || title}
+              className="h-full w-full object-contain p-3 transition-transform duration-300 group-hover:scale-[1.02]"
+            />
+          ) : mediaKind === "video" && srcUrl ? (
+            <video
+              src={srcUrl}
+              preload="metadata"
+              muted
+              playsInline
+              className="h-full w-full object-contain p-3"
+            />
+          ) : mediaKind === "audio" ? (
+            <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 p-6 text-center text-muted-foreground">
+              <Music4 className="h-12 w-12 text-primary/80" />
+              <div className="text-base font-semibold text-foreground">Audio file</div>
+              {srcUrl ? <audio controls src={srcUrl} className="w-full max-w-[260px]" /> : null}
+            </div>
+          ) : mediaKind === "document" ? (
+            <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 p-6 text-center">
+              <FileText className="h-12 w-12 text-primary/80" />
+              <div className="text-base font-semibold text-foreground">Document preview</div>
+              <div className="text-sm text-muted-foreground">{mime || "application/pdf"}</div>
+            </div>
+          ) : (
+            <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 p-6 text-center">
+              <File className="h-12 w-12 text-primary/80" />
+              <div className="text-base font-semibold text-foreground">File preview</div>
+              <div className="text-sm text-muted-foreground">{mime || "Unknown type"}</div>
+            </div>
+          )}
+        </div>
+
+        <Badge className="absolute bottom-3 right-3 bg-black/75 px-2 py-0.5 text-xs text-white hover:bg-black/90">
+          {mime || media.media_type || "file"}
+        </Badge>
+      </a>
+
+      <CardContent className="flex flex-1 flex-col justify-between space-y-3 p-4">
+        <div className="space-y-1.5">
+          <span
+            className="block truncate text-base font-semibold text-foreground"
+            title={title}
+            dangerouslySetInnerHTML={{ __html: cleanHtml(title) }}
+          />
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>{formatDate(media.date)}</span>
+            {media.media_details?.width && media.media_details?.height ? (
+              <span className="font-mono">
+                {media.media_details.width}x{media.media_details.height}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 border-t border-border/10 pt-3">
+          <a
+            href={srcUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-9 items-center justify-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            Open file
+          </a>
+
+          <div className="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => onCopy(srcUrl)}
+              aria-label={copied ? "File URL copied" : "Copy file URL"}
+            >
+              {copied ? (
+                <Check className="h-4 w-4 text-success" aria-hidden="true" />
+              ) : (
+                <Copy className="h-4 w-4" aria-hidden="true" />
+              )}
+            </Button>
+            <a
+              href={srcUrl}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground"
+              aria-label="Download file (opens in a new tab)"
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+            </a>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+const CommentCard = memo(function CommentCard({ comment }: { comment: WpCommentEntity }) {
+  return (
+    <Card
+      className="border-border/60 bg-card/20 shadow-sm [contain-intrinsic-size:auto_180px] [content-visibility:auto] transition-colors hover:border-primary/25"
+    >
+      <CardHeader className="flex flex-row items-center gap-3 space-y-0 border-b border-border/10 bg-card/10 p-4 pb-2.5">
+        {comment.author_avatar_urls?.["48"] || comment.author_avatar_urls?.["24"] ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            loading="lazy"
+            decoding="async"
+            src={comment.author_avatar_urls["48"] || comment.author_avatar_urls["24"]}
+            alt={comment.author_name}
+            className="h-10 w-10 rounded-full border border-border/45 object-cover"
+          />
+        ) : (
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+            <User className="h-4.5 w-4.5 text-primary" />
+          </div>
+        )}
+
+        <div className="min-w-0 flex-1">
+          <h4 className="truncate text-base font-semibold text-foreground">
+            {comment.author_name || "Anonymous"}
+          </h4>
+          <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+            {formatDate(comment.date)}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {comment.status ? (
+            <Badge
+              className={`text-xs font-semibold uppercase ${
+                comment.status === "approved" || comment.status === "approve"
+                  ? "border border-success/20 bg-success/10 text-success"
+                  : "border border-warning/20 bg-warning/10 text-warning"
+              }`}
+            >
+              {comment.status}
+            </Badge>
+          ) : null}
+          {comment.post ? (
+            <Badge variant="outline" className="border-border/50 font-mono text-xs">
+              Post ID: {comment.post}
+            </Badge>
+          ) : null}
+        </div>
+      </CardHeader>
+      <CardContent className="prose max-w-none p-4 pt-3 text-sm leading-relaxed text-foreground/80 dark:prose-invert">
+        <div dangerouslySetInnerHTML={{ __html: cleanHtml(comment.content?.rendered || "") }} />
+      </CardContent>
+    </Card>
+  );
+});
+
+const UserCard = memo(function UserCard({ user }: { user: WpUserEntity }) {
+  const avatarUrl = user.avatar_urls?.["96"] || user.avatar_urls?.["48"] || user.avatar_urls?.["24"];
+  return (
+    <Card
+      className="flex flex-col items-center border-border/60 bg-card/30 p-5 [contain-intrinsic-size:auto_260px] [content-visibility:auto] text-center shadow-sm transition-all hover:border-primary/30"
+    >
+      {avatarUrl ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          loading="lazy"
+          decoding="async"
+          src={avatarUrl}
+          alt={user.name}
+          className="mb-3.5 h-16 w-16 rounded-full border border-border/80 object-cover shadow-inner"
+        />
+      ) : (
+        <div className="mb-3.5 flex h-16 w-16 items-center justify-center rounded-full border border-border/60 bg-primary/10 shadow-inner">
+          <User className="h-8 w-8 text-primary" />
+        </div>
+      )}
+
+      {user.link ? (
+        <a
+          href={user.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-base font-semibold leading-snug text-foreground transition-colors hover:text-primary"
+        >
+          {user.name}
+        </a>
+      ) : (
+        <h4 className="text-base font-semibold leading-snug text-foreground">{user.name}</h4>
+      )}
+
+      <code className="mt-0.5 block text-xs text-muted-foreground">@{user.slug || user.username}</code>
+
+      {user.description ? (
+        <p className="mt-3.5 w-full border-t border-border/10 pt-3 text-sm leading-relaxed text-muted-foreground/80 line-clamp-3">
+          {user.description}
+        </p>
+      ) : (
+        <p className="mt-3.5 w-full border-t border-border/10 pt-3 text-sm italic leading-relaxed text-muted-foreground/70">
+          No bio description provided.
+        </p>
+      )}
+
+      {user.link ? (
+        <a
+          href={user.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-auto inline-flex items-center gap-1 pt-3.5 text-sm font-semibold text-primary transition-colors hover:text-primary/80"
+        >
+          <LinkIcon className="h-3.5 w-3.5" />
+          Profile link
+        </a>
+      ) : null}
+    </Card>
+  );
+});
+
+function VisualReader({ data, routePath }: VisualReaderProps) {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   const items = useMemo(
     () => (Array.isArray(data) ? data : data ? [data] : []) as Record<string, unknown>[],
     [data]
   );
+
+  const handleCopyUrl = useCallback((url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedUrl(url);
+    setTimeout(() => setCopiedUrl(null), 2000);
+  }, []);
 
   if (items.length === 0) {
     return (
@@ -109,29 +528,6 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
       </div>
     );
   }
-
-  const handleCopyUrl = (url: string) => {
-    navigator.clipboard.writeText(url);
-    setCopiedUrl(url);
-    setTimeout(() => setCopiedUrl(null), 2000);
-  };
-
-  const cleanHtml = (html: string) => {
-    if (!html) return "";
-    return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-  };
-
-  const formatDate = (dateStr: string) => {
-    try {
-      return new Date(dateStr).toLocaleDateString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return dateStr;
-    }
-  };
 
   const isPostLike =
     /\/(posts|pages|posts\/.*|pages\/.*)$/i.test(routePath) ||
@@ -167,353 +563,32 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
   if (isPostLike) {
     return (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {items.map((rawPost) => {
-          const post = rawPost as unknown as WpPostEntity;
-          const author = post._embedded?.author?.[0];
-          const featuredMedia = post._embedded?.["wp:featuredmedia"]?.[0];
-          const terms = post._embedded?.["wp:term"] || [];
-          const title = post.title?.rendered || `Entry #${post.id}`;
-          const excerpt = post.excerpt?.rendered || "";
-          const featuredImgUrl =
-            featuredMedia?.media_details?.sizes?.medium?.source_url ||
-            featuredMedia?.source_url ||
-            featuredMedia?.media_details?.sizes?.full?.source_url;
-          const categories = terms.flatMap((taxList) =>
-            taxList.filter((term) => term.taxonomy === "category")
-          );
+        {(items as unknown as WpPostEntity[]).map((post) => (
+          <PostCard key={post.id} post={post} />
+        ))}
+      </div>
+    );
+  }
 
+  if (isMedia) {
+    return (
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5">
+        {(items as unknown as WpMediaEntity[]).map((media) => {
+          const srcUrl = media.source_url || media.guid?.rendered || "";
           return (
-            <Card
-              key={post.id}
-              className="group flex flex-col overflow-hidden border-border/60 bg-card/30 shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg"
-            >
-              {featuredImgUrl ? (
-                <div className="relative aspect-video w-full overflow-hidden bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    loading="lazy"
-                    decoding="async"
-                    src={featuredImgUrl}
-                    alt={featuredMedia?.alt_text || "Featured media"}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                  />
-                  {categories.length > 0 ? (
-                    <div className="absolute left-3 top-3 flex max-w-[90%] flex-wrap gap-1.5">
-                      {categories.slice(0, 2).map((category) => (
-                        <Badge
-                          key={category.id}
-                          className="bg-primary/95 px-2 py-0.5 text-xs font-semibold text-primary-foreground"
-                        >
-                          {category.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="relative flex h-24 w-full items-center justify-center border-b border-border/20 bg-gradient-to-r from-primary/10 to-accent/10">
-                  <FileText className="h-7 w-7 text-muted-foreground/30" />
-                  {categories.length > 0 ? (
-                    <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-                      {categories.slice(0, 2).map((category) => (
-                        <Badge
-                          key={category.id}
-                          className="bg-primary/95 px-2 py-0.5 text-xs font-semibold text-primary-foreground"
-                        >
-                          {category.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
-              <CardHeader className="space-y-2 p-5 pb-2.5">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Calendar className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span>{formatDate(post.date)}</span>
-                  {post.status ? (
-                    <Badge
-                      variant="outline"
-                      className={`ml-auto py-0.5 text-xs font-semibold uppercase ${
-                        post.status === "publish"
-                          ? "border-success/30 bg-success/5 text-success"
-                          : "border-warning/30 text-warning"
-                      }`}
-                    >
-                      {post.status}
-                    </Badge>
-                  ) : null}
-                </div>
-
-                {post.link ? (
-                  <a
-                    href={post.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-base font-semibold leading-snug text-foreground transition-colors hover:text-primary"
-                    dangerouslySetInnerHTML={{ __html: cleanHtml(title) }}
-                  />
-                ) : (
-                  <h4
-                    className="text-base font-semibold leading-snug text-foreground"
-                    dangerouslySetInnerHTML={{ __html: cleanHtml(title) }}
-                  />
-                )}
-              </CardHeader>
-
-              <CardContent className="flex-1 p-5 pt-0">
-                {excerpt ? (
-                  <div
-                    className="line-clamp-3 text-sm leading-relaxed text-muted-foreground"
-                    dangerouslySetInnerHTML={{ __html: cleanHtml(excerpt) }}
-                  />
-                ) : (
-                  <p className="text-sm italic text-muted-foreground/70">
-                    No description excerpt available.
-                  </p>
-                )}
-              </CardContent>
-
-              <CardFooter className="mt-3 flex items-center justify-between border-t border-border/20 bg-card/10 p-5 pt-0">
-                <div className="mt-3.5 flex items-center gap-2">
-                  {author?.avatar_urls?.["24"] || author?.avatar_urls?.["48"] ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      loading="lazy"
-                      decoding="async"
-                      src={author.avatar_urls["48"] || author.avatar_urls["24"]}
-                      alt={author.name}
-                      className="h-6 w-6 rounded-full border border-border/60 object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
-                      <User className="h-3.5 w-3.5 text-primary" />
-                    </div>
-                  )}
-                  <span className="text-xs font-semibold text-foreground/80">
-                    {author?.name || "Author"}
-                  </span>
-                </div>
-
-                {post.link ? (
-                  <div className="mt-3.5 flex items-center gap-1.5">
-                    <a
-                      href={post.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-primary"
-                      aria-label="View original post (opens in a new tab)"
-                    >
-                      <LinkIcon className="h-4 w-4" aria-hidden="true" />
-                    </a>
-                  </div>
-                ) : null}
-              </CardFooter>
-            </Card>
+            <MediaCard key={media.id} media={media} copied={copiedUrl === srcUrl} onCopy={handleCopyUrl} />
           );
         })}
       </div>
     );
   }
 
-  if (isMedia) {
-    const mediaItems = items as unknown as WpMediaEntity[];
-
-    return (
-      <>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5">
-          {mediaItems.map((media) => {
-            const mime = media.mime_type || "";
-            const mediaKind = getMediaKind(media);
-            const srcUrl = media.source_url || media.guid?.rendered || "";
-            const previewUrl =
-              media.media_details?.sizes?.medium?.source_url ||
-              media.media_details?.sizes?.thumbnail?.source_url ||
-              srcUrl;
-            const title = media.title?.rendered || `Media #${media.id}`;
-            const aspectRatio = getAspectRatioStyle(media);
-
-            return (
-              <Card
-                key={media.id}
-                className="group flex flex-col overflow-hidden border-border/60 bg-card/30 shadow-md transition-all hover:border-primary/40 hover:shadow-lg"
-              >
-                <a
-                  href={srcUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="relative block border-b border-border/20 bg-background/50 text-left"
-                >
-                  <div
-                    className="flex w-full items-center justify-center overflow-hidden bg-slate-950/30"
-                    style={aspectRatio}
-                  >
-                    {mediaKind === "image" && previewUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        loading="lazy"
-                        decoding="async"
-                        src={previewUrl}
-                        alt={media.alt_text || title}
-                        className="h-full w-full object-contain p-3 transition-transform duration-300 group-hover:scale-[1.02]"
-                      />
-                    ) : mediaKind === "video" && srcUrl ? (
-                      <video
-                        src={srcUrl}
-                        preload="metadata"
-                        muted
-                        playsInline
-                        className="h-full w-full object-contain p-3"
-                      />
-                    ) : mediaKind === "audio" ? (
-                      <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 p-6 text-center text-muted-foreground">
-                        <Music4 className="h-12 w-12 text-primary/80" />
-                        <div className="text-base font-semibold text-foreground">Audio file</div>
-                        {srcUrl ? <audio controls src={srcUrl} className="w-full max-w-[260px]" /> : null}
-                      </div>
-                    ) : mediaKind === "document" ? (
-                      <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 p-6 text-center">
-                        <FileText className="h-12 w-12 text-primary/80" />
-                        <div className="text-base font-semibold text-foreground">Document preview</div>
-                        <div className="text-sm text-muted-foreground">{mime || "application/pdf"}</div>
-                      </div>
-                    ) : (
-                      <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-3 p-6 text-center">
-                        <File className="h-12 w-12 text-primary/80" />
-                        <div className="text-base font-semibold text-foreground">File preview</div>
-                        <div className="text-sm text-muted-foreground">{mime || "Unknown type"}</div>
-                      </div>
-                    )}
-                  </div>
-
-                  <Badge className="absolute bottom-3 right-3 bg-black/75 px-2 py-0.5 text-xs text-white hover:bg-black/90">
-                    {mime || media.media_type || "file"}
-                  </Badge>
-                </a>
-
-                <CardContent className="flex flex-1 flex-col justify-between space-y-3 p-4">
-                  <div className="space-y-1.5">
-                    <span
-                      className="block truncate text-base font-semibold text-foreground"
-                      title={title}
-                      dangerouslySetInnerHTML={{ __html: cleanHtml(title) }}
-                    />
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>{formatDate(media.date)}</span>
-                      {media.media_details?.width && media.media_details?.height ? (
-                        <span className="font-mono">
-                          {media.media_details.width}x{media.media_details.height}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 border-t border-border/10 pt-3">
-                    <a
-                      href={srcUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex h-9 items-center justify-center rounded-md border border-input px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-                    >
-                      Open file
-                    </a>
-
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleCopyUrl(srcUrl)}
-                        aria-label={copiedUrl === srcUrl ? "File URL copied" : "Copy file URL"}
-                      >
-                        {copiedUrl === srcUrl ? (
-                          <Check className="h-4 w-4 text-success" aria-hidden="true" />
-                        ) : (
-                          <Copy className="h-4 w-4" aria-hidden="true" />
-                        )}
-                      </Button>
-                      <a
-                        href={srcUrl}
-                        download
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-background/80 hover:text-foreground"
-                        aria-label="Download file (opens in a new tab)"
-                      >
-                        <Download className="h-4 w-4" aria-hidden="true" />
-                      </a>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </>
-    );
-  }
-
   if (isComment) {
     return (
       <div className="space-y-4">
-        {items.map((rawComment) => {
-          const comment = rawComment as unknown as WpCommentEntity;
-          return (
-            <Card
-              key={comment.id}
-              className="border-border/60 bg-card/20 shadow-sm transition-colors hover:border-primary/25"
-            >
-              <CardHeader className="flex flex-row items-center gap-3 space-y-0 border-b border-border/10 bg-card/10 p-4 pb-2.5">
-                {comment.author_avatar_urls?.["48"] || comment.author_avatar_urls?.["24"] ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    loading="lazy"
-                    decoding="async"
-                    src={comment.author_avatar_urls["48"] || comment.author_avatar_urls["24"]}
-                    alt={comment.author_name}
-                    className="h-10 w-10 rounded-full border border-border/45 object-cover"
-                  />
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                    <User className="h-4.5 w-4.5 text-primary" />
-                  </div>
-                )}
-
-                <div className="min-w-0 flex-1">
-                  <h4 className="truncate text-base font-semibold text-foreground">
-                    {comment.author_name || "Anonymous"}
-                  </h4>
-                  <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                    {formatDate(comment.date)}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {comment.status ? (
-                    <Badge
-                      className={`text-xs font-semibold uppercase ${
-                        comment.status === "approved" || comment.status === "approve"
-                          ? "border border-success/20 bg-success/10 text-success"
-                          : "border border-warning/20 bg-warning/10 text-warning"
-                      }`}
-                    >
-                      {comment.status}
-                    </Badge>
-                  ) : null}
-                  {comment.post ? (
-                    <Badge variant="outline" className="border-border/50 font-mono text-xs">
-                      Post ID: {comment.post}
-                    </Badge>
-                  ) : null}
-                </div>
-              </CardHeader>
-              <CardContent className="prose max-w-none p-4 pt-3 text-sm leading-relaxed text-foreground/80 dark:prose-invert">
-                <div dangerouslySetInnerHTML={{ __html: cleanHtml(comment.content?.rendered || "") }} />
-              </CardContent>
-            </Card>
-          );
-        })}
+        {(items as unknown as WpCommentEntity[]).map((comment) => (
+          <CommentCard key={comment.id} comment={comment} />
+        ))}
       </div>
     );
   }
@@ -521,68 +596,9 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
   if (isUser) {
     return (
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3">
-        {items.map((rawUser) => {
-          const user = rawUser as unknown as WpUserEntity;
-          const avatarUrl = user.avatar_urls?.["96"] || user.avatar_urls?.["48"] || user.avatar_urls?.["24"];
-          return (
-            <Card
-              key={user.id}
-              className="flex flex-col items-center border-border/60 bg-card/30 p-5 text-center shadow-sm transition-all hover:border-primary/30"
-            >
-              {avatarUrl ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  loading="lazy"
-                  decoding="async"
-                  src={avatarUrl}
-                  alt={user.name}
-                  className="mb-3.5 h-16 w-16 rounded-full border border-border/80 object-cover shadow-inner"
-                />
-              ) : (
-                <div className="mb-3.5 flex h-16 w-16 items-center justify-center rounded-full border border-border/60 bg-primary/10 shadow-inner">
-                  <User className="h-8 w-8 text-primary" />
-                </div>
-              )}
-
-              {user.link ? (
-                <a
-                  href={user.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-base font-semibold leading-snug text-foreground transition-colors hover:text-primary"
-                >
-                  {user.name}
-                </a>
-              ) : (
-                <h4 className="text-base font-semibold leading-snug text-foreground">{user.name}</h4>
-              )}
-
-              <code className="mt-0.5 block text-xs text-muted-foreground">@{user.slug || user.username}</code>
-
-              {user.description ? (
-                <p className="mt-3.5 w-full border-t border-border/10 pt-3 text-sm leading-relaxed text-muted-foreground/80 line-clamp-3">
-                  {user.description}
-                </p>
-              ) : (
-                <p className="mt-3.5 w-full border-t border-border/10 pt-3 text-sm italic leading-relaxed text-muted-foreground/70">
-                  No bio description provided.
-                </p>
-              )}
-
-              {user.link ? (
-                <a
-                  href={user.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-auto inline-flex items-center gap-1 pt-3.5 text-sm font-semibold text-primary transition-colors hover:text-primary/80"
-                >
-                  <LinkIcon className="h-3.5 w-3.5" />
-                  Profile link
-                </a>
-              ) : null}
-            </Card>
-          );
-        })}
+        {(items as unknown as WpUserEntity[]).map((user) => (
+          <UserCard key={user.id} user={user} />
+        ))}
       </div>
     );
   }
@@ -644,6 +660,8 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
     </div>
   );
 }
+
+export default memo(VisualReader);
 
 function getMediaKind(media: WpMediaEntity): "image" | "video" | "audio" | "document" | "file" {
   const mime = media.mime_type || "";
