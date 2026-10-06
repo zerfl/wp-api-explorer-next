@@ -191,6 +191,8 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                 <div className="relative aspect-video w-full overflow-hidden bg-muted">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src={featuredImgUrl}
                     alt={featuredMedia?.alt_text || "Featured media"}
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
@@ -278,6 +280,8 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                   {author?.avatar_urls?.["24"] || author?.avatar_urls?.["48"] ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img
+                      loading="lazy"
+                      decoding="async"
                       src={author.avatar_urls["48"] || author.avatar_urls["24"]}
                       alt={author.name}
                       className="h-6 w-6 rounded-full border border-border/60 object-cover"
@@ -348,6 +352,8 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                     {mediaKind === "image" && previewUrl ? (
                       /* eslint-disable-next-line @next/next/no-img-element */
                       <img
+                        loading="lazy"
+                        decoding="async"
                         src={previewUrl}
                         alt={media.alt_text || title}
                         className="h-full w-full object-contain p-3 transition-transform duration-300 group-hover:scale-[1.02]"
@@ -462,6 +468,8 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
                 {comment.author_avatar_urls?.["48"] || comment.author_avatar_urls?.["24"] ? (
                   /* eslint-disable-next-line @next/next/no-img-element */
                   <img
+                    loading="lazy"
+                    decoding="async"
                     src={comment.author_avatar_urls["48"] || comment.author_avatar_urls["24"]}
                     alt={comment.author_name}
                     className="h-10 w-10 rounded-full border border-border/45 object-cover"
@@ -524,6 +532,8 @@ export default function VisualReader({ data, routePath }: VisualReaderProps) {
               {avatarUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
+                  loading="lazy"
+                  decoding="async"
                   src={avatarUrl}
                   alt={user.name}
                   className="mb-3.5 h-16 w-16 rounded-full border border-border/80 object-cover shadow-inner"
