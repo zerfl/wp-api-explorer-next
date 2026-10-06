@@ -19,20 +19,24 @@ export function parsePageInput(raw: string, totalPages: number | null): PageInpu
 }
 
 /**
- * Page buttons to show: first, last, and `delta` pages around the focus page,
- * with "..." for gaps (a gap of one page shows the page instead).
+ * Page buttons to show: first, last, `pinned`, and `delta` pages around the
+ * focus page, with "..." for gaps (a gap of one page shows the page instead).
  */
 export function getPageNumbers(
   focusPage: number,
   totalPages: number,
-  delta = 2
+  delta = 2,
+  pinned: number[] = []
 ): Array<number | "..."> {
   const result: Array<number | "..."> = [];
   let previous: number | undefined;
 
   for (let page = 1; page <= totalPages; page++) {
     const visible =
-      page === 1 || page === totalPages || (page >= focusPage - delta && page <= focusPage + delta);
+      page === 1 ||
+      page === totalPages ||
+      pinned.includes(page) ||
+      (page >= focusPage - delta && page <= focusPage + delta);
     if (!visible) {
       continue;
     }

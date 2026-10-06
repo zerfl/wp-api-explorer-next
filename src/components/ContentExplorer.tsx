@@ -11,7 +11,10 @@ import { useExplorer } from "@/contexts/ExplorerContext";
 import { useRequest } from "@/contexts/RequestContext";
 import { isMediaRoute, supportsDateWindows } from "@/lib/explorer-client";
 import type { WalkEvent } from "@/lib/windowed-walk";
-import { SmartPagination } from "@/components/SmartPagination";
+import { getBulkActions } from "@/lib/page-range";
+import { buildUrlList, downloadTextFile, urlListFilename } from "@/lib/url-export";
+import { BulkLoadStatus } from "@/components/BulkLoadStatus";
+import { PaginationBar } from "@/components/PaginationBar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -58,8 +61,19 @@ function ContentExplorerComponent() {
       metrics,
       windowedMode,
       windowProgress,
+      bulkLoad,
     },
-    actions: { setQueryParams, executeCurrentRequest, changePerPage, setWindowedMode, stopWindowedWalk },
+    actions: {
+      setQueryParams,
+      executeCurrentRequest,
+      changePerPage,
+      setWindowedMode,
+      stopWindowedWalk,
+      loadMorePages,
+      retryBulkLoad,
+      stopBulkLoad,
+      exitBulkLoad,
+    },
   } = useRequest();
 
   const routeSupportsWindows = selectedRoute ? supportsDateWindows(selectedRoute) : false;
@@ -106,12 +120,50 @@ function ContentExplorerComponent() {
 
   const isSelectedMediaRoute = selectedRoute ? isMediaRoute(selectedRoute.path) : false;
 
-  const resultCount = Array.isArray(responseData) ? responseData.length : responseData ? 1 : 0;
+  const resultItems = Array.isArray(responseData) ? responseData : null;
+  const resultCount = resultItems ? resultItems.length : responseData ? 1 : 0;
   const currentPageNumber = Number.parseInt(queryParams.page || "1", 10);
   const resultLabel = selectedRoute ? getRouteLabel(selectedRoute).toLowerCase() : "items";
-  const resultAnnouncement = `Loaded ${resultCount} ${resultLabel} on page ${currentPageNumber}${
-    metrics?.totalPages ? ` of ${metrics.totalPages}` : ""
-  }.`;
+  const totalPages = metrics?.totalPages ?? null;
+  const lastShownPage = bulkLoad?.lastLoadedPage ?? currentPageNumber;
+  const resultAnnouncement = bulkLoad
+    ? ""
+    : `Loaded ${resultCount} ${resultLabel} on page ${currentPageNumber}${totalPages ? ` of ${totalPages}` : ""}.`;
+
+  // Only matters without a total; a short page doesn't mean the end (see page-range.ts).
+  const mayContinue = bulkLoad ? bulkLoad.mayContinue : resultCount > 0;
+  const bulkActions =
+    !windowedMode && resultItems && resultItems.length > 0
+      ? getBulkActions(lastShownPage, totalPages, mayContinue)
+      : null;
+
+  const downloadUrls =
+    connection && selectedRoute && resultItems && resultItems.length > 0
+      ? () => {
+          const typeSlug = selectedCollection?.slug ?? selectedRoute.path.split("/").pop() ?? "items";
+          downloadTextFile(
+            urlListFilename(connection.siteUrl, typeSlug, currentPageNumber, lastShownPage),
+            buildUrlList(resultItems, selectedRoute.path)
+          );
+        }
+      : null;
+
+  const paginationBar = (
+    <PaginationBar
+      currentPage={currentPageNumber}
+      totalPages={totalPages}
+      isLoading={isLoading}
+      hasNextPage={windowedMode ? windowProgress?.hasMore ?? true : mayContinue}
+      onPageChange={handlePageChange}
+      bulkLoad={bulkLoad}
+      bulkActions={bulkActions}
+      onLoadMore={(kind) => void loadMorePages(kind)}
+      onStop={stopBulkLoad}
+      onRetry={() => void retryBulkLoad()}
+      onExit={() => void exitBulkLoad()}
+      onDownload={downloadUrls}
+    />
+  );
 
   if (!connection) {
     return null;
@@ -174,15 +226,7 @@ function ContentExplorerComponent() {
                     </Select>
                   </div>
 
-                  <div className="flex items-center border-l border-border/30 pl-3">
-                    <SmartPagination
-                      currentPage={Number.parseInt(queryParams.page || "1", 10)}
-                      totalPages={metrics?.totalPages ?? null}
-                      isLoading={isLoading}
-                      onPageChange={handlePageChange}
-                      hasNextPage={windowedMode ? windowProgress?.hasMore ?? true : true}
-                    />
-                  </div>
+                  <div className="flex items-center border-l border-border/30 pl-3">{paginationBar}</div>
                 </div>
               </div>
 
@@ -364,6 +408,8 @@ function ContentExplorerComponent() {
         )
       ) : null}
 
+      {bulkLoad ? <BulkLoadStatus bulkLoad={bulkLoad} /> : null}
+
       {requestError ? (
         <div
           role="alert"
@@ -431,18 +477,13 @@ function ContentExplorerComponent() {
               <DataTable data={responseData} />
             </TabsContent>
             <TabsContent value="json" className="mt-0">
-              <JsonViewer data={responseData} />
+              {/* Expanding every item of a long list would render tens of thousands of nodes. */}
+              <JsonViewer data={responseData} initialExpandDepth={resultCount > 200 ? 1 : 2} />
             </TabsContent>
           </Tabs>
 
           <div className="mt-6 flex justify-center pb-8 border-t border-border/20 pt-6">
-            <SmartPagination
-              currentPage={Number.parseInt(queryParams.page || "1", 10)}
-              totalPages={metrics?.totalPages ?? null}
-              isLoading={isLoading}
-              onPageChange={handlePageChange}
-              hasNextPage={windowedMode ? windowProgress?.hasMore ?? true : true}
-            />
+            {paginationBar}
           </div>
         </div>
       ) : null}

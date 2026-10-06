@@ -40,6 +40,8 @@ import {
   supportsDateWindows,
 } from "@/lib/explorer-client";
 import { httpRequest } from "@/lib/http";
+import type { BulkKind } from "@/lib/page-range";
+import { usePageRangeLoad } from "@/lib/use-page-range-load";
 import { useRequestGuard } from "@/lib/use-request-guard";
 import { useWalkerStore } from "@/lib/use-walker-store";
 import { createWindowedWalker, FetchWindow, formatWpDate, normalizeWpDate } from "@/lib/windowed-walk";
@@ -167,15 +169,50 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
     setConnectionNotice(null);
   }, []);
 
+  const fetchJson = useCallback(
+    (
+      conn: SiteConnection,
+      targetUrl: string,
+      signal?: AbortSignal,
+      options?: { timeoutMs?: number; retries?: number }
+    ) => {
+      const headers = new Headers();
+      if (conn.auth) {
+        const basicHash = btoa(`${conn.auth.username}:${conn.auth.appPassword}`);
+        headers.set("Authorization", `Basic ${basicHash}`);
+      }
+
+      const fetchUrl = conn.useProxy
+        ? `/api/proxy?url=${encodeURIComponent(targetUrl)}`
+        : targetUrl;
+      return httpRequest(fetchUrl, {
+        headers,
+        signal,
+        timeoutMs: options?.timeoutMs,
+        retries: options?.retries,
+      });
+    },
+    []
+  );
+
+  const {
+    bulkLoad,
+    track: trackPageRange,
+    load: loadPageRange,
+    retry: retryBulkLoad,
+    stop: stopBulkLoad,
+  } = usePageRangeLoad({ fetchJson, requestGuard, setResponseData, setMetrics });
+
   // Also cancels any request in flight, so it can't write into the next view.
   const clearRequestState = useCallback(() => {
     requestGuard.invalidate();
+    trackPageRange(null);
     setIsLoading(false);
     setResponseData(null);
     setMetrics(null);
     setRequestError(null);
     setRequestFailure(null);
-  }, [requestGuard]);
+  }, [requestGuard, trackPageRange]);
 
   const persistPerPagePreference = useCallback((value: string) => {
     if (typeof window !== "undefined") {
@@ -199,26 +236,6 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
     [persistPerPagePreference]
   );
 
-  const fetchJson = useCallback(
-    (
-      conn: SiteConnection,
-      targetUrl: string,
-      signal?: AbortSignal,
-      options?: { timeoutMs?: number }
-    ) => {
-      const headers = new Headers();
-      if (conn.auth) {
-        const basicHash = btoa(`${conn.auth.username}:${conn.auth.appPassword}`);
-        headers.set("Authorization", `Basic ${basicHash}`);
-      }
-
-      const fetchUrl = conn.useProxy
-        ? `/api/proxy?url=${encodeURIComponent(targetUrl)}`
-        : targetUrl;
-      return httpRequest(fetchUrl, { headers, signal, timeoutMs: options?.timeoutMs });
-    },
-    []
-  );
 
   const executeWindowedRequest = useCallback(
     async (
@@ -415,9 +432,12 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
       setMetrics(null);
 
       if (walkerStore.isWindowed() && supportsDateWindows(route)) {
+        trackPageRange(null);
         await executeWindowedRequest(conn, route, params, signal, isCurrent);
         return;
       }
+
+      trackPageRange({ conn, route, params });
 
       const startTime = performance.now();
       const result = await fetchJson(conn, buildCollectionUrl(conn.apiRoot, route.path, params), signal);
@@ -476,7 +496,7 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
       setResponseData(json);
       setIsLoading(false);
     },
-    [executeWindowedRequest, fetchJson, requestGuard, walkerStore]
+    [executeWindowedRequest, fetchJson, requestGuard, trackPageRange, walkerStore]
   );
 
   const fetchTypeCollections = useCallback(
@@ -862,6 +882,17 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
     [connection, executeApiRequest, queryParams, selectedRoute, syncCurrentBookmark, walkerStore]
   );
 
+  const loadMorePages = useCallback(
+    async (kind: BulkKind) => {
+      await loadPageRange(kind, Array.isArray(responseData) ? responseData : [], metrics?.totalPages ?? null);
+    },
+    [loadPageRange, metrics?.totalPages, responseData]
+  );
+
+  const exitBulkLoad = useCallback(async () => {
+    await executeCurrentRequest();
+  }, [executeCurrentRequest]);
+
   const stopWindowedWalk = useCallback(() => {
     requestGuard.abortCurrent();
   }, [requestGuard]);
@@ -1005,6 +1036,7 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
         metrics,
         windowedMode,
         windowProgress,
+        bulkLoad,
       },
       actions: {
         setQueryParams,
@@ -1013,14 +1045,23 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
         changePerPage,
         setWindowedMode,
         stopWindowedWalk,
+        loadMorePages,
+        retryBulkLoad,
+        stopBulkLoad,
+        exitBulkLoad,
       },
       meta: {
         constructedUrl,
       },
     }),
     [
+      bulkLoad,
       changePerPage,
       constructedUrl,
+      exitBulkLoad,
+      loadMorePages,
+      retryBulkLoad,
+      stopBulkLoad,
       executeCurrentRequest,
       isLoading,
       metrics,

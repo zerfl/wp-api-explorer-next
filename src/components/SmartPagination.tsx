@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
+import { getPageNumbers, parsePageInput } from "@/lib/pagination";
 
 interface SmartPaginationProps {
   currentPage: number;
@@ -8,6 +10,76 @@ interface SmartPaginationProps {
   isLoading: boolean;
   onPageChange: (page: number) => void;
   hasNextPage?: boolean;
+  /** Last page shown when several pages are appended after `currentPage`. */
+  rangeEnd?: number;
+}
+
+function PageJumpInput({
+  totalPages,
+  disabled,
+  onJump,
+}: {
+  totalPages: number | null;
+  disabled: boolean;
+  onJump: (page: number) => void;
+}) {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const errorId = useId();
+
+  const submit = () => {
+    const result = parsePageInput(value, totalPages);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    setValue("");
+    setError(null);
+    onJump(result.page);
+  };
+
+  return (
+    <div className="relative">
+      <Input
+        type="text"
+        inputMode="numeric"
+        placeholder="Page"
+        aria-label="Go to page"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        title={error ?? "Type a page number and press Enter"}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => {
+          setValue(event.target.value);
+          setError(null);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            submit();
+          } else if (event.key === "Escape") {
+            setValue("");
+            setError(null);
+          }
+        }}
+        onBlur={() => {
+          if (!value) {
+            setError(null);
+          }
+        }}
+        className="h-10 w-20 bg-background/60 text-center text-sm"
+      />
+      {error ? (
+        <p
+          id={errorId}
+          role="alert"
+          className="absolute right-0 top-full z-10 mt-1 whitespace-nowrap rounded-md border border-destructive/30 bg-background px-2 py-1 text-xs text-destructive shadow-sm"
+        >
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 export function SmartPagination({
@@ -16,119 +88,102 @@ export function SmartPagination({
   isLoading,
   onPageChange,
   hasNextPage = true,
+  rangeEnd,
 }: SmartPaginationProps) {
-  const getPageNumbers = () => {
-    if (!totalPages) return [];
+  const lastShown = rangeEnd ?? currentPage;
+  const isRange = lastShown > currentPage;
 
-    const delta = 2; // 2 pages on each side of the current page
-    const range: number[] = [];
-    const rangeWithDots: (number | string)[] = [];
-    let l: number | undefined;
-
-    for (let i = 1; i <= totalPages; i++) {
-      if (
-        i === 1 ||
-        i === totalPages ||
-        (i >= currentPage - delta && i <= currentPage + delta)
-      ) {
-        range.push(i);
-      }
+  const jump = (page: number) => {
+    // Re-requesting the page already shown on its own would only refetch it.
+    if (page !== currentPage || isRange) {
+      onPageChange(page);
     }
-
-    for (const i of range) {
-      if (l !== undefined) {
-        if (i - l === 2) {
-          rangeWithDots.push(l + 1);
-        } else if (i - l !== 1) {
-          rangeWithDots.push("...");
-        }
-      }
-      rangeWithDots.push(i);
-      l = i;
-    }
-
-    return rangeWithDots;
   };
 
-  const pages = getPageNumbers();
+  const previous = (
+    <Button
+      variant="outline"
+      size="icon"
+      disabled={isLoading || currentPage <= 1}
+      onClick={() => onPageChange(currentPage - 1)}
+      className="h-10 w-10 shrink-0"
+    >
+      <span className="sr-only">Previous page</span>
+      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+    </Button>
+  );
 
-  // If no totalPages, fallback to simple Previous / Next
+  const next = (
+    <Button
+      variant="outline"
+      size="icon"
+      disabled={isLoading || (totalPages ? lastShown >= totalPages : !hasNextPage)}
+      onClick={() => onPageChange(lastShown + 1)}
+      className="h-10 w-10 shrink-0"
+    >
+      <span className="sr-only">Next page</span>
+      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+    </Button>
+  );
+
+  const shownLabel = isRange ? `Pages ${currentPage}–${lastShown}` : `Page ${currentPage}`;
+  const jumpInput = <PageJumpInput totalPages={totalPages} disabled={isLoading} onJump={jump} />;
+
+  const pageNumbers = totalPages ? getPageNumbers(lastShown, totalPages, 2, [currentPage]) : [];
+
+  // Without a total, fall back to simple Previous / Next.
   if (!totalPages) {
     return (
       <nav aria-label="Pagination" className="flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="icon"
-          disabled={isLoading || currentPage <= 1}
-          onClick={() => onPageChange(currentPage - 1)}
-          className="h-10 w-10"
-        >
-          <span className="sr-only">Previous page</span>
-          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        {previous}
         <span
           aria-live="polite"
           className="min-w-[92px] text-center text-sm font-semibold text-foreground/80 px-3"
         >
-          Page {currentPage}
+          {shownLabel}
         </span>
-        <Button
-          variant="outline"
-          size="icon"
-          disabled={isLoading || !hasNextPage}
-          onClick={() => onPageChange(currentPage + 1)}
-          className="h-10 w-10"
-        >
-          <span className="sr-only">Next page</span>
-          <ChevronRight className="h-4 w-4" aria-hidden="true" />
-        </Button>
+        {next}
+        <div className="ml-2">{jumpInput}</div>
       </nav>
     );
   }
 
   return (
     <nav aria-label="Pagination" className="flex items-center gap-1">
-      <Button
-        variant="outline"
-        size="icon"
-        disabled={isLoading || currentPage <= 1}
-        onClick={() => onPageChange(currentPage - 1)}
-        className="h-10 w-10 shrink-0"
-      >
-        <span className="sr-only">Previous page</span>
-        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-      </Button>
+      {previous}
 
       <div className="hidden md:flex items-center gap-1">
-        {pages.map((page, index) => {
+        {pageNumbers.map((page, index) => {
           if (page === "...") {
+            // Pages hidden behind this ellipsis are all shown when it sits inside the range.
+            const inRange =
+              isRange &&
+              (pageNumbers[index - 1] as number) >= currentPage &&
+              (pageNumbers[index + 1] as number) <= lastShown;
             return (
               <div
                 key={`ellipsis-${index}`}
                 aria-hidden="true"
-                className="flex h-10 w-10 items-center justify-center"
+                className={`flex h-10 w-10 items-center justify-center rounded-lg ${inRange ? "bg-primary/20" : ""}`}
               >
-                <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                <MoreHorizontal className={`h-4 w-4 ${inRange ? "text-primary" : "text-muted-foreground"}`} />
               </div>
             );
           }
 
-          const pageNumber = page as number;
-          const isActive = pageNumber === currentPage;
+          const isShown = page >= currentPage && page <= lastShown;
 
           return (
             <Button
-              key={`page-${pageNumber}`}
-              variant={isActive ? "default" : "outline"}
-              aria-label={`Go to page ${pageNumber}`}
-              aria-current={isActive ? "page" : undefined}
-              className={`h-10 w-10 shrink-0 ${
-                isActive ? "pointer-events-none" : ""
-              }`}
+              key={`page-${page}`}
+              variant={isShown ? "default" : "outline"}
+              aria-label={`Go to page ${page}`}
+              aria-current={isShown ? "page" : undefined}
+              className={`h-10 w-10 shrink-0 ${isShown && !isRange ? "pointer-events-none" : ""}`}
               disabled={isLoading}
-              onClick={() => onPageChange(pageNumber)}
+              onClick={() => onPageChange(page)}
             >
-              {pageNumber}
+              {page}
             </Button>
           );
         })}
@@ -137,20 +192,12 @@ export function SmartPagination({
       {/* Mobile view fallback: just show current of total */}
       <div className="md:hidden flex items-center px-3">
         <span aria-live="polite" className="text-sm font-semibold text-foreground/80">
-          Page {currentPage} of {totalPages}
+          {shownLabel} of {totalPages}
         </span>
       </div>
 
-      <Button
-        variant="outline"
-        size="icon"
-        disabled={isLoading || currentPage >= totalPages}
-        onClick={() => onPageChange(currentPage + 1)}
-        className="h-10 w-10 shrink-0"
-      >
-        <span className="sr-only">Next page</span>
-        <ChevronRight className="h-4 w-4" aria-hidden="true" />
-      </Button>
+      {next}
+      <div className="ml-2">{jumpInput}</div>
     </nav>
   );
 }

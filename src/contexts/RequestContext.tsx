@@ -4,6 +4,8 @@ import type React from "react";
 import { createContext, useContext } from "react";
 import { ResponseMetrics } from "@/lib/explorer-client";
 import type { HttpFailureKind } from "@/lib/http";
+import type { BulkKind } from "@/lib/page-range";
+import type { BulkLoadState } from "@/lib/use-page-range-load";
 import type { WalkEvent } from "@/lib/windowed-walk";
 import { WpRouteInfo } from "@/lib/wp-schema";
 
@@ -31,6 +33,8 @@ export interface RequestState {
   metrics: ResponseMetrics | null;
   windowedMode: boolean;
   windowProgress: WindowProgress | null;
+  /** Non-null while further pages are appended to the first one. */
+  bulkLoad: BulkLoadState | null;
 }
 
 export interface RequestActions {
@@ -40,6 +44,11 @@ export interface RequestActions {
   changePerPage: (value: string | null) => Promise<void>;
   setWindowedMode: (enabled: boolean) => void;
   stopWindowedWalk: () => void;
+  loadMorePages: (kind: BulkKind) => Promise<void>;
+  retryBulkLoad: () => Promise<void>;
+  stopBulkLoad: () => void;
+  /** Back to the first page on its own. */
+  exitBulkLoad: () => Promise<void>;
 }
 
 export interface RequestMeta {

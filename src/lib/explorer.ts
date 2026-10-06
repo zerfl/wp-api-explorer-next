@@ -10,6 +10,9 @@ export const WINDOWED_SITES_STORAGE_KEY = "wp-api-explorer.windowed-sites";
 /** Upper bound on how many parent paths we probe when walking up to the install root. */
 export const MAX_ROOT_CANDIDATES = 5;
 
+/** Requests in flight per bulk page load; leaves 2 of a host's 6 browser connections for thumbnails. */
+export const PAGE_RANGE_CONCURRENCY = 4;
+
 export interface ExplorerBookmark {
   siteUrl: string;
   contentType: string;

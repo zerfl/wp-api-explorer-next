@@ -7,9 +7,11 @@ import { Copy, Check, Download, ChevronRight, ChevronDown, Search, FolderClosed,
 
 interface JsonViewerProps {
   data: unknown;
+  /** Nodes shallower than this start expanded. */
+  initialExpandDepth?: number;
 }
 
-export default function JsonViewer({ data }: JsonViewerProps) {
+export default function JsonViewer({ data, initialExpandDepth = 2 }: JsonViewerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [copied, setCopied] = useState(false);
   const [globalExpanded, setGlobalExpanded] = useState<boolean | null>(null);
@@ -101,6 +103,7 @@ export default function JsonViewer({ data }: JsonViewerProps) {
             searchQuery={searchQuery}
             globalExpanded={globalExpanded}
             depth={0}
+            initialExpandDepth={initialExpandDepth}
           />
         )}
       </div>
@@ -115,11 +118,20 @@ interface JsonNodeProps {
   searchQuery: string;
   globalExpanded: boolean | null;
   depth: number;
+  initialExpandDepth: number;
 }
 
-function JsonNode({ val, name, isLast, searchQuery, globalExpanded, depth }: JsonNodeProps) {
+function JsonNode({
+  val,
+  name,
+  isLast,
+  searchQuery,
+  globalExpanded,
+  depth,
+  initialExpandDepth,
+}: JsonNodeProps) {
   const [prevGlobalExpanded, setPrevGlobalExpanded] = useState<boolean | null>(null);
-  const [isExpanded, setIsExpanded] = useState(depth < 2);
+  const [isExpanded, setIsExpanded] = useState(depth < initialExpandDepth);
 
   if (globalExpanded !== prevGlobalExpanded) {
     setPrevGlobalExpanded(globalExpanded);
@@ -241,6 +253,7 @@ function JsonNode({ val, name, isLast, searchQuery, globalExpanded, depth }: Jso
               searchQuery={searchQuery}
               globalExpanded={globalExpanded}
               depth={depth + 1}
+              initialExpandDepth={initialExpandDepth}
             />
           ))}
         </div>

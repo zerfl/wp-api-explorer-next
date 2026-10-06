@@ -32,6 +32,10 @@ describe("getPageNumbers", () => {
     expect(getPageNumbers(10, 20)).toEqual([1, "...", 8, 9, 10, 11, 12, "...", 20]);
   });
 
+  it("keeps pinned pages visible outside the focus window", () => {
+    expect(getPageNumbers(150, 200, 2, [6])).toEqual([1, "...", 6, "...", 148, 149, 150, 151, 152, "...", 200]);
+  });
+
   it("fills a one-page gap with the page instead of an ellipsis", () => {
     expect(getPageNumbers(5, 20)).toEqual([1, 2, 3, 4, 5, 6, 7, "...", 20]);
   });

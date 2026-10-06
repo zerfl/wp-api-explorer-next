@@ -105,7 +105,8 @@ function isSlowSignal(failure: HttpFailure): boolean {
   );
 }
 
-function isInvalidPageNumber(body: string | null): boolean {
+/** True for WordPress's 400 `rest_post_invalid_page_number` (page past the end). */
+export function isInvalidPageNumber(body: string | null): boolean {
   if (!body) {
     return false;
   }
