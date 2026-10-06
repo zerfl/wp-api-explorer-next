@@ -56,8 +56,10 @@ describe("Pagination", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Page 5 of 17/ }));
     const input = screen.getByRole("textbox", { name: "Go to page" });
+    // "Go", not "Next": a Next key moves focus to the following field and drops the input.
+    expect(input).toHaveAttribute("enterkeyhint", "go");
     fireEvent.change(input, { target: { value: "12" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.submit(input.closest("form")!);
 
     expect(props.onPageChange).toHaveBeenCalledWith(12);
   });
@@ -68,7 +70,7 @@ describe("Pagination", () => {
     fireEvent.click(screen.getByRole("button", { name: /Page 5 of 17/ }));
     const input = screen.getByRole("textbox", { name: "Go to page" });
     fireEvent.change(input, { target: { value: "18" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.submit(input.closest("form")!);
 
     expect(props.onPageChange).not.toHaveBeenCalled();
     expect(input).toHaveAttribute("aria-invalid", "true");

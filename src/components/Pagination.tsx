@@ -70,11 +70,30 @@ function PageField({
     );
   }
 
+  const submit = () => {
+    const result = parsePageInput(value, totalPages);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    close();
+    onJump(result.page);
+  };
+
+  // A form with enterKeyHint="go": without it, Android keyboards show "Next"
+  // when another field follows, which moves focus away and discards the input.
   return (
-    <div className="relative h-full">
+    <form
+      className="relative h-full"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
       <input
         autoFocus
         inputMode="numeric"
+        enterKeyHint="go"
         aria-label="Go to page"
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
@@ -88,14 +107,6 @@ function PageField({
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             close();
-          } else if (event.key === "Enter") {
-            const result = parsePageInput(value, totalPages);
-            if (!result.ok) {
-              setError(result.message);
-              return;
-            }
-            close();
-            onJump(result.page);
           }
         }}
         className={`h-full w-28 bg-background text-center text-sm font-semibold tabular-nums outline-none ${
@@ -111,7 +122,7 @@ function PageField({
           {error}
         </p>
       ) : null}
-    </div>
+    </form>
   );
 }
 
