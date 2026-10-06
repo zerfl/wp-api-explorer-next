@@ -21,6 +21,8 @@ export interface RequestGuard {
    * ticket current. Lets a user stop work while still keeping its partial result.
    */
   abortCurrent: () => void;
+  /** Abort the in-flight request and make every issued ticket stale. */
+  invalidate: () => void;
 }
 
 /**
@@ -49,6 +51,12 @@ export function useRequestGuard(): RequestGuard {
     controllerRef.current?.abort();
   }, []);
 
+  const invalidate = useCallback(() => {
+    controllerRef.current?.abort();
+    controllerRef.current = null;
+    idRef.current += 1;
+  }, []);
+
   // Stable reference so consumers can safely list the guard in dependency arrays.
-  return useMemo(() => ({ begin, abortCurrent }), [abortCurrent, begin]);
+  return useMemo(() => ({ begin, abortCurrent, invalidate }), [abortCurrent, begin, invalidate]);
 }

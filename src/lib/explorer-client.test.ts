@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildBaseQueryParams,
+  buildCollectionUrl,
   extractWpErrorMessage,
   isMediaRoute,
 } from "@/lib/explorer-client";
@@ -35,6 +36,18 @@ describe("buildBaseQueryParams", () => {
 
   it("lets an explicit per_page override the preference", () => {
     expect(buildBaseQueryParams(postsRoute, "100", { per_page: "25" }).per_page).toBe("25");
+  });
+});
+
+describe("buildCollectionUrl", () => {
+  it("joins the route to the API root and drops empty params", () => {
+    expect(
+      buildCollectionUrl("https://a.test/wp-json/", "/wp/v2/media", { page: "6", search: "", per_page: "100" })
+    ).toBe("https://a.test/wp-json/wp/v2/media?page=6&per_page=100");
+  });
+
+  it("treats the index route as the API root itself", () => {
+    expect(buildCollectionUrl("https://a.test/wp-json", "/", {})).toBe("https://a.test/wp-json");
   });
 });
 

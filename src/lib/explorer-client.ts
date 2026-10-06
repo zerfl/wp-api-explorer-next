@@ -197,6 +197,22 @@ export const buildBaseQueryParams = (
   return params;
 };
 
+/** Request URL for a route; empty param values are left out. */
+export const buildCollectionUrl = (
+  apiRoot: string,
+  routePath: string,
+  params: Record<string, string>
+): string => {
+  const path = routePath === "/" ? "" : routePath;
+  const url = new URL(apiRoot.replace(/\/+$/, "") + path);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) {
+      url.searchParams.set(key, value);
+    }
+  });
+  return url.toString();
+};
+
 export const isMediaRoute = (routePath: string) => routePath.endsWith("/media");
 
 /**

@@ -25,6 +25,7 @@ import {
 } from "@/lib/explorer";
 import {
   buildBaseQueryParams,
+  buildCollectionUrl,
   ConnectToSiteOptions,
   extractWpErrorMessage,
   getStoredAutoProxy,
@@ -80,6 +81,9 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
   const [metrics, setMetrics] = useState<ResponseMetrics | null>(null);
 
   const walkerStore = useWalkerStore();
+  // "Latest request wins": aborts the prior request and lets us drop stale
+  // responses so a slow earlier fetch can never overwrite newer state.
+  const requestGuard = useRequestGuard();
 
   const [hydratedBookmarkSearch, setHydratedBookmarkSearch] = useState<string | null>(null);
   const [internalNavigationSearch, setInternalNavigationSearch] = useState<string | null>(null);
@@ -111,17 +115,7 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
       return "";
     }
 
-    const path = selectedRoute.path === "/" ? "" : selectedRoute.path;
-    const baseUrl = connection.apiRoot.replace(/\/+$/, "") + path;
-    const url = new URL(baseUrl);
-
-    Object.entries(queryParams).forEach(([key, value]) => {
-      if (value) {
-        url.searchParams.set(key, value);
-      }
-    });
-
-    return url.toString();
+    return buildCollectionUrl(connection.apiRoot, selectedRoute.path, queryParams);
   }, [connection, queryParams, selectedRoute]);
 
   useEffect(() => {
@@ -173,12 +167,15 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
     setConnectionNotice(null);
   }, []);
 
+  // Also cancels any request in flight, so it can't write into the next view.
   const clearRequestState = useCallback(() => {
+    requestGuard.invalidate();
+    setIsLoading(false);
     setResponseData(null);
     setMetrics(null);
     setRequestError(null);
     setRequestFailure(null);
-  }, []);
+  }, [requestGuard]);
 
   const persistPerPagePreference = useCallback((value: string) => {
     if (typeof window !== "undefined") {
@@ -222,10 +219,6 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
     },
     []
   );
-
-  // "Latest request wins": aborts the prior request and lets us drop stale
-  // responses so a slow earlier fetch can never overwrite newer state.
-  const requestGuard = useRequestGuard();
 
   const executeWindowedRequest = useCallback(
     async (
@@ -273,14 +266,7 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
       });
 
       const fetchWindow: FetchWindow = async (request, windowSignal) => {
-        const path = route.path === "/" ? "" : route.path;
-        const baseUrl = conn.apiRoot.replace(/\/+$/, "") + path;
-        const url = new URL(baseUrl);
-        Object.entries(params).forEach(([key, value]) => {
-          if (value) {
-            url.searchParams.set(key, value);
-          }
-        });
+        const url = new URL(buildCollectionUrl(conn.apiRoot, route.path, params));
         url.searchParams.set("after", request.after);
         url.searchParams.set("before", request.before);
         url.searchParams.set("page", String(request.page));
@@ -434,17 +420,7 @@ export default function ExplorerProvider({ children }: ExplorerProviderProps) {
       }
 
       const startTime = performance.now();
-      const path = route.path === "/" ? "" : route.path;
-      const baseUrl = conn.apiRoot.replace(/\/+$/, "") + path;
-      const url = new URL(baseUrl);
-
-      Object.entries(params).forEach(([key, value]) => {
-        if (value) {
-          url.searchParams.set(key, value);
-        }
-      });
-
-      const result = await fetchJson(conn, url.toString(), signal);
+      const result = await fetchJson(conn, buildCollectionUrl(conn.apiRoot, route.path, params), signal);
       const durationMs = Math.round(performance.now() - startTime);
 
       // A newer request superseded this one — drop the stale result silently so
