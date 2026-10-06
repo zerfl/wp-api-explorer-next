@@ -75,7 +75,6 @@ function start(fetcher: ReturnType<typeof controlledFetcher>, from: number, to: 
   const outcome = runPageRange<Item>({
     from,
     to,
-    perPage: 2,
     concurrency,
     fetchPage: fetcher.fetchPage,
     onCommit: (commit: PageCommit<Item>) => commits.push(commit.page),
@@ -114,17 +113,28 @@ describe("runPageRange", () => {
     expect(run.commits).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
-  it("ends at a short page and discards pages fetched beyond it", async () => {
+  it("keeps going past short pages", async () => {
+    const fetcher = controlledFetcher();
+    const run = start(fetcher, 1, 3);
+
+    await fetcher.resolve(1, itemsFor(1, 1));
+    await fetcher.resolve(2, itemsFor(2));
+    await fetcher.resolve(3, itemsFor(3, 1));
+
+    await expect(run.outcome).resolves.toEqual({ status: "done", committedThrough: 3 });
+  });
+
+  it("ends at an empty page and cancels pages fetched beyond it", async () => {
     const fetcher = controlledFetcher();
     const run = start(fetcher, 1, 10);
 
     await fetcher.resolve(3, itemsFor(3));
-    await fetcher.resolve(2, itemsFor(2, 1));
+    await fetcher.resolve(2, itemsFor(2, 0));
     await fetcher.resolve(1, itemsFor(1));
 
     // Page 4 started when page 3 finished; finding the end cancels it.
-    await expect(run.outcome).resolves.toEqual({ status: "ended", committedThrough: 2 });
-    expect(run.commits).toEqual([1, 2]);
+    await expect(run.outcome).resolves.toEqual({ status: "ended", committedThrough: 1 });
+    expect(run.commits).toEqual([1]);
     expect(fetcher.requested).toEqual([1, 2, 3, 4]);
   });
 
@@ -162,9 +172,9 @@ describe("runPageRange", () => {
     const run = start(fetcher, 1, 10, 2);
 
     await fetcher.resolve(2, { kind: "error", failure });
-    await fetcher.resolve(1, itemsFor(1, 1));
+    await fetcher.resolve(1, { kind: "end" });
 
-    await expect(run.outcome).resolves.toEqual({ status: "ended", committedThrough: 1 });
+    await expect(run.outcome).resolves.toEqual({ status: "ended", committedThrough: 0 });
   });
 
   it("reports what was committed when aborted from outside", async () => {

@@ -16,7 +16,6 @@ export interface PageCommit<T> {
 export interface PageRangeOptions<T> {
   from: number;
   to: number;
-  perPage: number;
   concurrency: number;
   fetchPage: (page: number, signal: AbortSignal) => Promise<PageFetchResult<T>>;
   /** Called synchronously, strictly in page order, with no gaps. */
@@ -38,12 +37,12 @@ export type PageRangeOutcome =
  * the failed page is committed. Finding the end cancels in-flight pages past it.
  */
 export async function runPageRange<T>(options: PageRangeOptions<T>): Promise<PageRangeOutcome> {
-  const { from, to, perPage, concurrency, fetchPage, onCommit, signal } = options;
+  const { from, to, concurrency, fetchPage, onCommit, signal } = options;
 
   const buffer = new Map<number, PageCommit<T>>();
   let nextPage = from;
   let committedThrough = from - 1;
-  // Last page that exists, once a short page, empty page or past-the-end error reveals it.
+  // Last page that exists, once an empty page or past-the-end error reveals it.
   let lastPage = Number.POSITIVE_INFINITY;
   type Failed = { page: number; failure: HttpFailure };
   let failed: Failed | null = null;
@@ -97,12 +96,11 @@ export async function runPageRange<T>(options: PageRangeOptions<T>): Promise<Pag
         continue;
       }
 
+      // Not a short page: WordPress drops unreadable items after the query, so
+      // pages in the middle of a collection can come back short.
       if (result.kind === "end" || result.items.length === 0) {
         endAt(page - 1);
       } else {
-        if (result.items.length < perPage) {
-          endAt(page);
-        }
         buffer.set(page, { page, ...result });
       }
       flush();
