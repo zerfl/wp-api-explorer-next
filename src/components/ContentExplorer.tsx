@@ -14,7 +14,7 @@ import type { WalkEvent } from "@/lib/windowed-walk";
 import { getBulkActions } from "@/lib/page-range";
 import { buildUrlList, downloadTextFile, urlListFilename } from "@/lib/url-export";
 import { BulkLoadStatus } from "@/components/BulkLoadStatus";
-import { PaginationBar } from "@/components/PaginationBar";
+import { Pagination, PaginationProps } from "@/components/Pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -130,8 +130,9 @@ function ContentExplorerComponent() {
     ? ""
     : `Loaded ${resultCount} ${resultLabel} on page ${currentPageNumber}${totalPages ? ` of ${totalPages}` : ""}.`;
 
-  // Only matters without a total; a short page doesn't mean the end (see page-range.ts).
-  const mayContinue = bulkLoad ? bulkLoad.mayContinue : resultCount > 0;
+  // Only matters without a total. A short or even empty page isn't the end
+  // (see page-range.ts); only a past-the-end 400 during a run is.
+  const mayContinue = bulkLoad ? bulkLoad.mayContinue : true;
   const bulkActions =
     !windowedMode && resultItems && resultItems.length > 0
       ? getBulkActions(lastShownPage, totalPages, mayContinue)
@@ -148,22 +149,21 @@ function ContentExplorerComponent() {
         }
       : null;
 
-  const paginationBar = (
-    <PaginationBar
-      currentPage={currentPageNumber}
-      totalPages={totalPages}
-      isLoading={isLoading}
-      hasNextPage={windowedMode ? windowProgress?.hasMore ?? true : mayContinue}
-      onPageChange={handlePageChange}
-      bulkLoad={bulkLoad}
-      bulkActions={bulkActions}
-      onLoadMore={(kind) => void loadMorePages(kind)}
-      onStop={stopBulkLoad}
-      onRetry={() => void retryBulkLoad()}
-      onExit={() => void exitBulkLoad()}
-      onDownload={downloadUrls}
-    />
-  );
+  const paginationProps: PaginationProps = {
+    currentPage: currentPageNumber,
+    lastShown: lastShownPage,
+    totalPages,
+    isLoading,
+    hasNextPage: windowedMode ? windowProgress?.hasMore ?? true : mayContinue,
+    onPageChange: handlePageChange,
+    bulkLoad,
+    bulkActions,
+    onLoadMore: (kind) => void loadMorePages(kind),
+    onStop: stopBulkLoad,
+    onRetry: () => void retryBulkLoad(),
+    onExit: () => void exitBulkLoad(),
+    onDownload: downloadUrls,
+  };
 
   if (!connection) {
     return null;
@@ -226,7 +226,7 @@ function ContentExplorerComponent() {
                     </Select>
                   </div>
 
-                  <div className="flex items-center border-l border-border/30 pl-3">{paginationBar}</div>
+                  <Pagination {...paginationProps} />
                 </div>
               </div>
 
@@ -482,8 +482,8 @@ function ContentExplorerComponent() {
             </TabsContent>
           </Tabs>
 
-          <div className="mt-6 flex justify-center pb-8 border-t border-border/20 pt-6">
-            {paginationBar}
+          <div className="mt-6 flex justify-center border-t border-border/20 pb-8 pt-6">
+            <Pagination {...paginationProps} />
           </div>
         </div>
       ) : null}

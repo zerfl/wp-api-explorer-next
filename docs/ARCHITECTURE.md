@@ -42,11 +42,11 @@ Explorer state (selected site, content type, page) is encoded as a **query strin
 
 ## Accumulate mode (page ranges)
 
-Both pagination bars render `PaginationBar` (`SmartPagination` plus the bulk actions); `BulkLoadStatus` shows progress once, between the filters and the results. `usePageRangeLoad` (`src/lib/use-page-range-load.ts`) holds the session in refs and exposes `bulkLoad` state; `executeApiRequest` starts a new session for every single-page request, and `clearRequestState` ends it.
+The header and the bottom of the results both render `Pagination`: a stepper (previous, a "5–15 / 17" field you click to type a page number, next) and a split button whose main action is "+10 pages" (or "Load remaining N" when 10 or fewer are left), with "Load all remaining", "Download URLs" and "Back to page X only" in its menu. While a run is going, the split button becomes Stop with a progress fill. `BulkLoadStatus` shows progress once, between the filters and the results. `usePageRangeLoad` (`src/lib/use-page-range-load.ts`) holds the session in refs and exposes `bulkLoad` state; `executeApiRequest` starts a new session for every single-page request, and `clearRequestState` ends it.
 
 - A run takes a request-guard ticket, so any navigation supersedes it. Stop uses `abortCurrent()` (ticket stays current, partial result kept). `clearRequestState` calls `invalidate()`, which also cancels requests that `selectRoute`/`setAdvancedMode` would otherwise let finish into the new view.
 - Bulk runs reuse the params of the request that produced the page shown, not the live (possibly edited, unsearched) filter inputs.
-- Appended items reach React state at most every 750 ms, so a long run doesn't re-render a growing list per page.
+- Appending must not block the main thread. Appended items reach React state at most every 750 ms, inside `startTransition` so React renders new cards in time slices. Result views are memoized and render memoized per-item cards (`VisualReader`, `DataTable` rows), so a flush renders only the new items and progress updates skip the list. Cards use `content-visibility: auto`, so off-screen cards cost almost no layout or paint. Measured on a production build, loading 17 pages (1,633 media items) had no long tasks and a worst frame gap of 35 ms. Keep these when touching the result views.
 - Results stay visible during a run: bulk loading has its own state and never sets `isLoading`.
 - Any page click, jump, filter or per-page change, collection switch, or "Show page X only" returns to normal paging.
 
