@@ -239,8 +239,8 @@ export function createWindowedWalker<T extends { id: number }>(
 
         const totalPagesHeader = result.headers.get("x-wp-totalpages");
         const totalPages = totalPagesHeader ? Number.parseInt(totalPagesHeader, 10) : null;
-        const finished =
-          batch.length < perPage || (totalPages !== null && page >= totalPages);
+        // A short page isn't the end: WordPress drops unreadable items after the query.
+        const finished = batch.length === 0 || (totalPages !== null ? page >= totalPages : false);
 
         if (finished) {
           finishWindow(afterMs, beforeMs, before);

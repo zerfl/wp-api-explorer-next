@@ -202,8 +202,8 @@ describe("createWindowedWalker", () => {
   it("advances the cursor to before minus one second and dedupes overlapping ids", async () => {
     const { requests, fetchWindow } = recorder((_req, index) => {
       if (index === 0) return ok([]); // probe
-      if (index === 1) return ok([{ id: 1 }, { id: 2 }]);
-      return ok([{ id: 2 }, { id: 3 }]);
+      if (index === 1) return ok([{ id: 1 }, { id: 2 }], { "x-wp-totalpages": "1" });
+      return ok([{ id: 2 }, { id: 3 }], { "x-wp-totalpages": "1" });
     });
 
     const walker = createWindowedWalker<{ id: number }>(fetchWindow, {
@@ -222,6 +222,50 @@ describe("createWindowedWalker", () => {
     const expectedAfter = formatWpDate(new Date(new Date(firstWindow.before).getTime() - 1000));
     expect(secondWindow.after).toBe(expectedAfter);
     expect(walker.items.map((item) => item.id)).toEqual([1, 2, 3]);
+  });
+
+  it("keeps paging a window past a short page", async () => {
+    const { requests, fetchWindow } = recorder((_req, index) => {
+      if (index === 0) return ok([]); // probe
+      if (index === 1) return ok([{ id: 1 }], { "x-wp-totalpages": "2" });
+      return ok([{ id: 2 }, { id: 3 }], { "x-wp-totalpages": "2" });
+    });
+
+    const walker = createWindowedWalker<{ id: number }>(fetchWindow, {
+      perPage: 2,
+      start: "2020-01-01T00:00:00",
+      end: "2020-02-01T00:00:00",
+      initialWindowMs: 400 * DAY_MS,
+      ceilingMs: 400 * DAY_MS,
+      minWindowMs: DAY_MS,
+    });
+
+    await walker.collect(10);
+
+    expect(requests.slice(1).map((req) => req.page)).toEqual([1, 2]);
+    expect(walker.items.map((item) => item.id)).toEqual([1, 2, 3]);
+  });
+
+  it("without x-wp-totalpages, pages a window until an empty page", async () => {
+    const { requests, fetchWindow } = recorder((_req, index) => {
+      if (index === 0) return ok([]); // probe
+      if (index === 1) return ok([{ id: 1 }]);
+      return ok([]);
+    });
+
+    const walker = createWindowedWalker<{ id: number }>(fetchWindow, {
+      perPage: 2,
+      start: "2020-01-01T00:00:00",
+      end: "2020-02-01T00:00:00",
+      initialWindowMs: 400 * DAY_MS,
+      ceilingMs: 400 * DAY_MS,
+      minWindowMs: DAY_MS,
+    });
+
+    await walker.collect(10);
+
+    expect(requests.slice(1).map((req) => req.page)).toEqual([1, 2]);
+    expect(walker.done).toBe(true);
   });
 
   it("pages a window until x-wp-totalpages, then finishes", async () => {
