@@ -45,7 +45,9 @@ export async function runPageRange<T>(options: PageRangeOptions<T>): Promise<Pag
   let committedThrough = from - 1;
   // Last page that exists, once a short page, empty page or past-the-end error reveals it.
   let lastPage = Number.POSITIVE_INFINITY;
-  let failed: { page: number; failure: HttpFailure } | null = null;
+  type Failed = { page: number; failure: HttpFailure };
+  let failed: Failed | null = null;
+  let anyFailed = false;
   const inFlight = new Map<number, AbortController>();
   signal.addEventListener("abort", () => inFlight.forEach((controller) => controller.abort()), {
     once: true,
@@ -73,7 +75,7 @@ export async function runPageRange<T>(options: PageRangeOptions<T>): Promise<Pag
   };
 
   const worker = async () => {
-    while (!signal.aborted && !failed && nextPage <= to && nextPage <= lastPage) {
+    while (!signal.aborted && !anyFailed && nextPage <= to && nextPage <= lastPage) {
       const page = nextPage++;
       const controller = new AbortController();
       inFlight.set(page, controller);
@@ -91,6 +93,7 @@ export async function runPageRange<T>(options: PageRangeOptions<T>): Promise<Pag
         if (!failed || page < failed.page) {
           failed = { page, failure: result.failure };
         }
+        anyFailed = true;
         continue;
       }
 
@@ -112,9 +115,10 @@ export async function runPageRange<T>(options: PageRangeOptions<T>): Promise<Pag
     return { status: "aborted", committedThrough };
   }
   // A failure past the end of the collection doesn't matter.
-  const failure = failed as { page: number; failure: HttpFailure } | null;
-  if (failure && failure.page <= lastPage) {
-    return { status: "failed", committedThrough, failedPage: failure.page, failure: failure.failure };
+  // Assigned inside the workers, which TypeScript's narrowing can't see.
+  const firstFailure = failed as Failed | null;
+  if (firstFailure && firstFailure.page <= lastPage) {
+    return { status: "failed", committedThrough, failedPage: firstFailure.page, failure: firstFailure.failure };
   }
   if (lastPage < to) {
     return { status: "ended", committedThrough };
