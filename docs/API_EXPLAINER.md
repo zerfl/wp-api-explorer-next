@@ -71,8 +71,22 @@ Walker (`src/lib/windowed-walk.ts`):
 - A window that times out or returns HTTP ≥ 500 is halved and retried, and the ceiling drops to the halved span so it cannot grow back past the size the site refused. Once the probe has succeeded, a network-level failure counts as a timeout too: in direct mode a host's 503/504 gateway page carries no CORS headers, so the browser fetch rejects and surfaces as a network error rather than an HTTP 5xx.
 - An empty window doubles the next span (up to the ceiling) to skip sparse stretches quickly.
 - The cursor advances to `before − 1 s` (the boundary second overlaps by design), and items are deduped by `id`.
-- Windows are requested with `orderby=id&order=asc` and paged until the array is short or `x-wp-totalpages` is reached; a 400 `rest_post_invalid_page_number` ends the window.
+- Windows are requested with `orderby=id&order=asc` and paged until `x-wp-totalpages` is reached (or, without that header, until an empty page); a 400 `rest_post_invalid_page_number` ends the window. A short page does not end a window (see §6).
 - The first call probes a single 1-day window ending at the end bound; if that fails with a timeout or 5xx the site is treated as unavailable for collection queries.
 - The walker and proxy use a 35 s timeout so a 30 s upstream 504 arrives as an HTTP failure rather than a proxy 502.
 
 Mode is per site: a toggle appears whenever the route's first endpoint accepts both `after` and `before`, and the choice is remembered in sessionStorage.
+
+## 6. Fetching page ranges
+"+10 pages" and "Load all remaining (N)" append the pages after the one shown (`src/lib/page-range.ts`, driven by `src/lib/use-page-range-load.ts`).
+
+Verified constraints:
+- **Short pages are not the end.** WordPress filters out items the visitor may not read *after* the SQL query, so pages in the middle of a collection come back with fewer than `per_page` items (wordpress.org/news media at `per_page=100`: 95, 99 and 98 items on pages 5, 7 and 8 of 17). Only an empty array or a 400 `rest_post_invalid_page_number` marks the end. Never use `items.length < per_page` as an end signal.
+- **Offset paging drifts.** Items published or deleted during a run shift page boundaries. Shifted-in repeats are dropped by `id` and counted; shifted-out items are missed and cannot be detected.
+- `x-wp-totalpages` may be missing (then only "+10 pages" is offered, ending at an empty page) or change during a run (the latest value is used).
+
+Behavior:
+- At most 4 requests are in flight (`PAGE_RANGE_CONCURRENCY`), leaving 2 of the browser's 6 HTTP/1.1 connections per host for thumbnails in direct mode.
+- Pages are committed strictly in order: a page that finishes early waits for the pages before it, so the view is always a gap-free run of pages.
+- Each page gets 2 retries with backoff (`httpRequest` honors `Retry-After`). A page that still fails stops scheduling; in-flight pages finish, the pages before the failed one are kept, and "Retry from page X" resumes. Normal single-page requests keep 0 retries.
+- Date-window mode has no bulk actions: its walker is sequential by nature and its "pages" are slices of a cache, so there is no remaining page count.

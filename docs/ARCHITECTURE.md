@@ -38,6 +38,17 @@ Explorer state (selected site, content type, page) is encoded as a **query strin
 - `buildExplorerUrl` / `parseExplorerQuery` (`src/lib/explorer.ts`) are the single encode/decode pair. The whole site URL — including any subdirectory install path — lives in the single `site` value, so it never collides with the target site's own paths (a WordPress install at `example.com/site/` round-trips cleanly). This replaced the earlier `/site/[…segments]` route, which reserved a path prefix that conflicted with subdirectory installs.
 - `ExplorerProvider` tracks `location.search` directly (initialized on mount, updated on `popstate`) and derives the bookmark with `useMemo`. It intentionally does **not** use `useSearchParams()`, which would force a whole-page CSR bailout.
 - Navigations call `history.pushState`/`replaceState` and keep `search` state in sync; on load, a present bookmark auto-connects to its site.
+- Appending pages ("+10 pages" / "Load all remaining") does **not** change the URL: `page` stays the first page shown. A bookmark, reload or Back therefore costs one request; encoding the range would replay up to hundreds of requests on every open. The downloadable URL list is the durable record of a bulk load.
+
+## Accumulate mode (page ranges)
+
+Both pagination bars render `PaginationBar` (`SmartPagination` plus the bulk actions); `BulkLoadStatus` shows progress once, between the filters and the results. `usePageRangeLoad` (`src/lib/use-page-range-load.ts`) holds the session in refs and exposes `bulkLoad` state; `executeApiRequest` starts a new session for every single-page request, and `clearRequestState` ends it.
+
+- A run takes a request-guard ticket, so any navigation supersedes it. Stop uses `abortCurrent()` (ticket stays current, partial result kept). `clearRequestState` calls `invalidate()`, which also cancels requests that `selectRoute`/`setAdvancedMode` would otherwise let finish into the new view.
+- Bulk runs reuse the params of the request that produced the page shown, not the live (possibly edited, unsearched) filter inputs.
+- Appended items reach React state at most every 750 ms, so a long run doesn't re-render a growing list per page.
+- Results stay visible during a run: bulk loading has its own state and never sets `isLoading`.
+- Any page click, jump, filter or per-page change, collection switch, or "Show page X only" returns to normal paging.
 
 ## Date-window listing mode
 
