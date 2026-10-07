@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
+import { useInView } from "@/lib/use-in-view";
 import QueryBuilder from "@/components/QueryBuilder";
 import RequestConsole from "@/components/RequestConsole";
 import VisualReader from "@/components/VisualReader";
@@ -13,7 +14,7 @@ import { isMediaRoute, supportsDateWindows } from "@/lib/explorer-client";
 import type { WalkEvent } from "@/lib/windowed-walk";
 import { getBulkActions } from "@/lib/page-range";
 import { buildUrlList, downloadTextFile, urlListFilename } from "@/lib/url-export";
-import { BulkLoadStatus } from "@/components/BulkLoadStatus";
+import { BulkLoadDock, BulkLoadStatus } from "@/components/BulkLoadStatus";
 import { Pagination, PaginationProps } from "@/components/Pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,12 @@ function ContentExplorerComponent() {
       exitBulkLoad,
     },
   } = useRequest();
+
+  // Appended cards push the bottom pager far down, so a run started there would
+  // otherwise leave no visible progress.
+  const [statusRef, statusInView] = useInView<HTMLDivElement>();
+  const [bottomPagerRef, bottomPagerInView] = useInView<HTMLDivElement>();
+  const showDock = bulkLoad?.status === "running" && !statusInView && !bottomPagerInView;
 
   const routeSupportsWindows = selectedRoute ? supportsDateWindows(selectedRoute) : false;
   const showWindowedResume =
@@ -408,7 +415,11 @@ function ContentExplorerComponent() {
         )
       ) : null}
 
-      {bulkLoad ? <BulkLoadStatus bulkLoad={bulkLoad} /> : null}
+      {bulkLoad ? (
+        <div ref={statusRef}>
+          <BulkLoadStatus bulkLoad={bulkLoad} />
+        </div>
+      ) : null}
 
       {requestError ? (
         <div
@@ -482,11 +493,13 @@ function ContentExplorerComponent() {
             </TabsContent>
           </Tabs>
 
-          <div className="mt-6 flex justify-center border-t border-border/20 pb-8 pt-6">
+          <div ref={bottomPagerRef} className="mt-6 flex justify-center border-t border-border/20 pb-8 pt-6">
             <Pagination {...paginationProps} />
           </div>
         </div>
       ) : null}
+
+      {showDock && bulkLoad ? <BulkLoadDock bulkLoad={bulkLoad} onStop={stopBulkLoad} /> : null}
     </div>
   );
 }
