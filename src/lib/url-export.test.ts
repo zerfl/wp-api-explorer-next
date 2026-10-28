@@ -8,7 +8,7 @@ describe("buildUrlList", () => {
       { id: 2, guid: { rendered: "https://a.test/?attachment_id=2" } },
       { id: 3 },
     ];
-    expect(buildUrlList(items, "/wp/v2/media")).toEqual([
+    expect(buildUrlList(items, "/wp/v2/media", "https://a.test")).toEqual([
       "https://a.test/1.jpg",
       "https://a.test/?attachment_id=2",
     ]);
@@ -20,7 +20,14 @@ describe("buildUrlList", () => {
       { id: 2, link: "" },
       "not-an-object",
     ];
-    expect(buildUrlList(items, "/wp/v2/posts")).toEqual(["https://a.test/hello/"]);
+    expect(buildUrlList(items, "/wp/v2/posts", "https://a.test")).toEqual(["https://a.test/hello/"]);
+  });
+
+  it("exports root-relative media URLs on the site's host", () => {
+    const items = [{ id: 1, source_url: "/wp-content/uploads/1.jpg" }];
+    expect(buildUrlList(items, "/wp/v2/media", "https://a.test")).toEqual([
+      "https://a.test/wp-content/uploads/1.jpg",
+    ]);
   });
 
   it("keeps first-seen order and drops repeats", () => {
@@ -29,7 +36,7 @@ describe("buildUrlList", () => {
       { link: "https://a.test/a/" },
       { link: "https://a.test/b/" },
     ];
-    expect(buildUrlList(items, "/wp/v2/pages")).toEqual(["https://a.test/b/", "https://a.test/a/"]);
+    expect(buildUrlList(items, "/wp/v2/pages", "https://a.test")).toEqual(["https://a.test/b/", "https://a.test/a/"]);
   });
 });
 

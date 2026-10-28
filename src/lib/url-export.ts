@@ -1,4 +1,5 @@
 import { isMediaRoute } from "@/lib/explorer-client";
+import { resolveSiteUrl } from "@/lib/site-url";
 
 function stringAt(record: Record<string, unknown>, key: string): string | null {
   const value = record[key];
@@ -22,13 +23,13 @@ function itemUrl(item: unknown, media: boolean): string | null {
 }
 
 /** One URL per item, in display order: `source_url` for media, `link` otherwise. */
-export function buildUrlList(items: unknown[], routePath: string): string[] {
+export function buildUrlList(items: unknown[], routePath: string, siteUrl: string): string[] {
   const media = isMediaRoute(routePath);
   const urls = new Set<string>();
   for (const item of items) {
     const url = itemUrl(item, media);
     if (url) {
-      urls.add(url);
+      urls.add(resolveSiteUrl(url, siteUrl));
     }
   }
   return [...urls];

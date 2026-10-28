@@ -17,6 +17,7 @@ import {
   User,
 } from "lucide-react";
 import { CSSProperties, memo, useCallback, useMemo, useState } from "react";
+import { resolveSiteUrl } from "@/lib/site-url";
 
 interface WpPostEntity {
   id: number;
@@ -88,6 +89,7 @@ interface WpUserEntity {
 interface VisualReaderProps {
   data: unknown;
   routePath: string;
+  siteUrl: string;
 }
 const cleanHtml = (html: string) => {
   if (!html) return "";
@@ -107,7 +109,7 @@ const formatDate = (dateStr: string) => {
 };
 
 // Cards are memoized so appending pages renders only the new items.
-const PostCard = memo(function PostCard({ post }: { post: WpPostEntity }) {
+const PostCard = memo(function PostCard({ post, siteUrl }: { post: WpPostEntity; siteUrl: string }) {
   const author = post._embedded?.author?.[0];
   const featuredMedia = post._embedded?.["wp:featuredmedia"]?.[0];
   const terms = post._embedded?.["wp:term"] || [];
@@ -117,6 +119,8 @@ const PostCard = memo(function PostCard({ post }: { post: WpPostEntity }) {
     featuredMedia?.media_details?.sizes?.medium?.source_url ||
     featuredMedia?.source_url ||
     featuredMedia?.media_details?.sizes?.full?.source_url;
+  const postLink = post.link ? resolveSiteUrl(post.link, siteUrl) : undefined;
+  const authorAvatar = author?.avatar_urls?.["48"] || author?.avatar_urls?.["24"];
   const categories = terms.flatMap((taxList) =>
     taxList.filter((term) => term.taxonomy === "category")
   );
@@ -131,7 +135,7 @@ const PostCard = memo(function PostCard({ post }: { post: WpPostEntity }) {
           <img
             loading="lazy"
             decoding="async"
-            src={featuredImgUrl}
+            src={resolveSiteUrl(featuredImgUrl, siteUrl)}
             alt={featuredMedia?.alt_text || "Featured media"}
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
           />
@@ -184,9 +188,9 @@ const PostCard = memo(function PostCard({ post }: { post: WpPostEntity }) {
           ) : null}
         </div>
 
-        {post.link ? (
+        {postLink ? (
           <a
-            href={post.link}
+            href={postLink}
             target="_blank"
             rel="noopener noreferrer"
             className="block text-base font-semibold leading-snug text-foreground transition-colors hover:text-primary"
@@ -215,13 +219,13 @@ const PostCard = memo(function PostCard({ post }: { post: WpPostEntity }) {
 
       <CardFooter className="mt-3 flex items-center justify-between border-t border-border/20 bg-card/10 p-5 pt-0">
         <div className="mt-3.5 flex items-center gap-2">
-          {author?.avatar_urls?.["24"] || author?.avatar_urls?.["48"] ? (
+          {authorAvatar ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
               loading="lazy"
               decoding="async"
-              src={author.avatar_urls["48"] || author.avatar_urls["24"]}
-              alt={author.name}
+              src={resolveSiteUrl(authorAvatar, siteUrl)}
+              alt={author?.name}
               className="h-6 w-6 rounded-full border border-border/60 object-cover"
             />
           ) : (
@@ -234,10 +238,10 @@ const PostCard = memo(function PostCard({ post }: { post: WpPostEntity }) {
           </span>
         </div>
 
-        {post.link ? (
+        {postLink ? (
           <div className="mt-3.5 flex items-center gap-1.5">
             <a
-              href={post.link}
+              href={postLink}
               target="_blank"
               rel="noopener noreferrer"
               className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-primary"
@@ -254,20 +258,24 @@ const PostCard = memo(function PostCard({ post }: { post: WpPostEntity }) {
 
 const MediaCard = memo(function MediaCard({
   media,
+  siteUrl,
   copied,
   onCopy,
 }: {
   media: WpMediaEntity;
+  siteUrl: string;
   copied: boolean;
   onCopy: (url: string) => void;
 }) {
   const mime = media.mime_type || "";
   const mediaKind = getMediaKind(media);
-  const srcUrl = media.source_url || media.guid?.rendered || "";
-  const previewUrl =
+  const srcUrl = mediaSourceUrl(media, siteUrl);
+  const previewUrl = resolveSiteUrl(
     media.media_details?.sizes?.medium?.source_url ||
-    media.media_details?.sizes?.thumbnail?.source_url ||
-    srcUrl;
+      media.media_details?.sizes?.thumbnail?.source_url ||
+      srcUrl,
+    siteUrl
+  );
   const title = media.title?.rendered || `Media #${media.id}`;
   const aspectRatio = getAspectRatioStyle(media);
 
@@ -386,18 +394,25 @@ const MediaCard = memo(function MediaCard({
   );
 });
 
-const CommentCard = memo(function CommentCard({ comment }: { comment: WpCommentEntity }) {
+const CommentCard = memo(function CommentCard({
+  comment,
+  siteUrl,
+}: {
+  comment: WpCommentEntity;
+  siteUrl: string;
+}) {
+  const avatarUrl = comment.author_avatar_urls?.["48"] || comment.author_avatar_urls?.["24"];
   return (
     <Card
       className="border-border/60 bg-card/20 shadow-sm [contain-intrinsic-size:auto_180px] [content-visibility:auto] transition-colors hover:border-primary/25"
     >
       <CardHeader className="flex flex-row items-center gap-3 space-y-0 border-b border-border/10 bg-card/10 p-4 pb-2.5">
-        {comment.author_avatar_urls?.["48"] || comment.author_avatar_urls?.["24"] ? (
+        {avatarUrl ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             loading="lazy"
             decoding="async"
-            src={comment.author_avatar_urls["48"] || comment.author_avatar_urls["24"]}
+            src={resolveSiteUrl(avatarUrl, siteUrl)}
             alt={comment.author_name}
             className="h-10 w-10 rounded-full border border-border/45 object-cover"
           />
@@ -442,8 +457,9 @@ const CommentCard = memo(function CommentCard({ comment }: { comment: WpCommentE
   );
 });
 
-const UserCard = memo(function UserCard({ user }: { user: WpUserEntity }) {
+const UserCard = memo(function UserCard({ user, siteUrl }: { user: WpUserEntity; siteUrl: string }) {
   const avatarUrl = user.avatar_urls?.["96"] || user.avatar_urls?.["48"] || user.avatar_urls?.["24"];
+  const userLink = user.link ? resolveSiteUrl(user.link, siteUrl) : undefined;
   return (
     <Card
       className="flex flex-col items-center border-border/60 bg-card/30 p-5 [contain-intrinsic-size:auto_260px] [content-visibility:auto] text-center shadow-sm transition-all hover:border-primary/30"
@@ -453,7 +469,7 @@ const UserCard = memo(function UserCard({ user }: { user: WpUserEntity }) {
         <img
           loading="lazy"
           decoding="async"
-          src={avatarUrl}
+          src={resolveSiteUrl(avatarUrl, siteUrl)}
           alt={user.name}
           className="mb-3.5 h-16 w-16 rounded-full border border-border/80 object-cover shadow-inner"
         />
@@ -463,9 +479,9 @@ const UserCard = memo(function UserCard({ user }: { user: WpUserEntity }) {
         </div>
       )}
 
-      {user.link ? (
+      {userLink ? (
         <a
-          href={user.link}
+          href={userLink}
           target="_blank"
           rel="noopener noreferrer"
           className="text-base font-semibold leading-snug text-foreground transition-colors hover:text-primary"
@@ -488,9 +504,9 @@ const UserCard = memo(function UserCard({ user }: { user: WpUserEntity }) {
         </p>
       )}
 
-      {user.link ? (
+      {userLink ? (
         <a
-          href={user.link}
+          href={userLink}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-auto inline-flex items-center gap-1 pt-3.5 text-sm font-semibold text-primary transition-colors hover:text-primary/80"
@@ -503,7 +519,7 @@ const UserCard = memo(function UserCard({ user }: { user: WpUserEntity }) {
   );
 });
 
-function VisualReader({ data, routePath }: VisualReaderProps) {
+function VisualReader({ data, routePath, siteUrl }: VisualReaderProps) {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   const items = useMemo(
@@ -564,7 +580,7 @@ function VisualReader({ data, routePath }: VisualReaderProps) {
     return (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {(items as unknown as WpPostEntity[]).map((post) => (
-          <PostCard key={post.id} post={post} />
+          <PostCard key={post.id} post={post} siteUrl={siteUrl} />
         ))}
       </div>
     );
@@ -574,9 +590,15 @@ function VisualReader({ data, routePath }: VisualReaderProps) {
     return (
       <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5">
         {(items as unknown as WpMediaEntity[]).map((media) => {
-          const srcUrl = media.source_url || media.guid?.rendered || "";
+          const srcUrl = mediaSourceUrl(media, siteUrl);
           return (
-            <MediaCard key={media.id} media={media} copied={copiedUrl === srcUrl} onCopy={handleCopyUrl} />
+            <MediaCard
+              key={media.id}
+              media={media}
+              siteUrl={siteUrl}
+              copied={copiedUrl === srcUrl}
+              onCopy={handleCopyUrl}
+            />
           );
         })}
       </div>
@@ -587,7 +609,7 @@ function VisualReader({ data, routePath }: VisualReaderProps) {
     return (
       <div className="space-y-4">
         {(items as unknown as WpCommentEntity[]).map((comment) => (
-          <CommentCard key={comment.id} comment={comment} />
+          <CommentCard key={comment.id} comment={comment} siteUrl={siteUrl} />
         ))}
       </div>
     );
@@ -597,7 +619,7 @@ function VisualReader({ data, routePath }: VisualReaderProps) {
     return (
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:grid-cols-3">
         {(items as unknown as WpUserEntity[]).map((user) => (
-          <UserCard key={user.id} user={user} />
+          <UserCard key={user.id} user={user} siteUrl={siteUrl} />
         ))}
       </div>
     );
@@ -662,6 +684,10 @@ function VisualReader({ data, routePath }: VisualReaderProps) {
 }
 
 export default memo(VisualReader);
+
+function mediaSourceUrl(media: WpMediaEntity, siteUrl: string): string {
+  return resolveSiteUrl(media.source_url || media.guid?.rendered || "", siteUrl);
+}
 
 function getMediaKind(media: WpMediaEntity): "image" | "video" | "audio" | "document" | "file" {
   const mime = media.mime_type || "";

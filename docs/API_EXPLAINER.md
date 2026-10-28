@@ -90,3 +90,6 @@ Behavior:
 - Pages are committed strictly in order: a page that finishes early waits for the pages before it, so the view is always a gap-free run of pages.
 - Each page gets 2 retries with backoff (`httpRequest` honors `Retry-After`). A page that still fails stops scheduling; in-flight pages finish, the pages before the failed one are kept, and "Retry from page X" resumes. Normal single-page requests keep 0 retries.
 - Date-window mode has no bulk actions: its walker is sequential by nature and its "pages" are slices of a cache, so there is no remaining page count.
+
+## 7. Relative URLs in responses
+Some sites return root-relative URLs (e.g. `"source_url": "/wp-content/uploads/…"` on dolce-gravure.jp media, typically from a relative-URL plugin). Rendered as-is, the browser resolves them against the explorer's own origin. Any URL taken from a response for `src`, `href`, copying or export must go through `resolveSiteUrl` (`src/lib/site-url.ts`) with `connection.siteUrl`. The Raw JSON view shows values unchanged.

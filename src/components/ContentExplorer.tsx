@@ -151,7 +151,7 @@ function ContentExplorerComponent() {
           const typeSlug = selectedCollection?.slug ?? selectedRoute.path.split("/").pop() ?? "items";
           downloadTextFile(
             urlListFilename(connection.siteUrl, typeSlug, currentPageNumber, lastShownPage),
-            buildUrlList(resultItems, selectedRoute.path)
+            buildUrlList(resultItems, selectedRoute.path, connection.siteUrl)
           );
         }
       : null;
@@ -482,7 +482,11 @@ function ContentExplorerComponent() {
             </div>
 
             <TabsContent value="visual" className="mt-0">
-              <VisualReader data={responseData} routePath={selectedRoute?.path || ""} />
+              <VisualReader
+                data={responseData}
+                routePath={selectedRoute?.path || ""}
+                siteUrl={connection.siteUrl}
+              />
             </TabsContent>
             <TabsContent value="table" className="mt-0">
               <DataTable data={responseData} />
